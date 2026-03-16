@@ -1,122 +1,163 @@
 ---
 name: html-bookmarks-to-markdown
-description: Convert bookmark-style HTML exports into a locally stored Markdown archive with compact indexes, preserved category structure, incremental sync, and pending-description tracking for newly added links.
+description: Convert bookmark-style HTML exports into a locally stored Markdown category tree driven by a user-owned taxonomy, prioritizing semantic classification from the local ROOT outline over the incoming HTML folder structure, with minimal state for future syncs and a legacy full-archive mode when needed.
 ---
 
 # HTML Bookmarks Markdown Sync
 
 ## Overview
 
-Use this skill when the user provides a bookmark-style HTML file and wants:
-- each URL explained in plain language,
-- the original HTML category/folder structure preserved,
-- future HTML exports compared against prior runs,
-- Markdown output that stays in sync over time,
-- or a second external HTML file imported into an existing archive with dedupe and category reuse.
+Use this skill when the user provides a bookmark-style HTML export and wants a Markdown bookmark archive whose primary output is a category tree.
 
-This skill is modeled after the same "parse -> diff -> enrich -> sync" idea as the X-likes-to-Markdown workflow, but targets bookmark HTML exports instead of JSON post data.
+The default workflow is now `categories-only`:
+- classify links by a local reference Markdown taxonomy,
+- render only category folders and `Index.md` files,
+- keep minimal external state for future syncs,
+- optimize for Obsidian indexing and search stability instead of feature breadth.
+
+The preferred taxonomy source is the user's local `ROOT 网页归类母目录.md`.
+
+Important classification rule:
+- do **not** trust the incoming HTML folder structure as the primary classifier
+- use the local taxonomy as the source of truth
+- use page title, domain, URL tokens, and taxonomy semantics to infer meaning
+- only reuse the HTML category path as a weak hint when it aligns closely with the local taxonomy
+
+Legacy `full` mode still exists for compatibility, but it is no longer the recommended path.
 
 ## Defaults
 
 Assume these unless the user asks otherwise:
+- archive profile: `categories-only`
+- taxonomy source: required, prefer local `ROOT 网页归类母目录.md`
+- taxonomy scope: `full`
+- unmatched policy: `nearest`
+- display category source: `reference`
 - mode: `merge`
 - title language: `zh`
-- layout: `compact`
-- preserve the HTML category structure exactly
-- only newly added or still-undescribed URLs need fresh explanations
+- state root: `<container>/_state/`
 
-For `compact` layout:
-- keep sync state outside the rendered archive by default
-- keep `02 Links/` and `03 Domains/` inside the archive folder; only machine-state files belong in `state-root`
-- keep domain indexes lightweight; do not duplicate full per-link detail there
-- keep category indexes flattened for Obsidian: avoid deep nested category folders inside the vault
-- when the target archive is inside an Obsidian vault under `.../iCloud~md~obsidian/Documents/<VaultName>/`, default the external state root to `.../iCloud~md~obsidian/Documents/<container-name>-state/` so it sits alongside the vault rather than inside it
+`categories-only` output:
+- `<target-root>/<container-name>/Index.md`
+- `<target-root>/<container-name>/<一级主类>/.../Index.md`
+- `<target-root>/<container-name>/_state/` containing:
+  - `state.json`
+  - `latest-summary.json`
+  - `Index.md`
 
-If the user explicitly wants a single self-contained folder:
-- keep the archive folder name exactly as requested, for example `Bookmarks`
-- override `state-root` into the archive folder itself, preferably as `<target-root>/<container-name>/_state/`
-- keep `00 Reports/`, `01 Categories/`, `02 Links/`, `03 Domains/`, `Dashboard.md`, and `_state/` all under that one archive folder
-- when this archive lives inside iCloud/Obsidian, update those managed top-level paths in place instead of deleting and recreating the whole archive root
+`categories-only` behavior:
+- do not create `01 Categories/`
+- do not create `02 Links/`
+- do not create `03 Domains/`
+- do not create `00 Reports/`
+- do not create `Dashboard.md`
+- do not create `pending_annotations.json`
+- do not create `excluded_links.json`
+- each directory gets an `Index.md`
+- container root directly contains the primary category folders plus a root `Index.md`
+- each `Index.md` lists only direct child categories and direct links
+- link rows use a compact format such as `- [标题](URL) · \`host\``
+- classification should prefer semantic matching against the local taxonomy tree
+- HTML source folders should only influence placement when they are highly consistent with the local taxonomy
+
+Legacy `full` mode:
+- keeps the older reports, link shards, domain indexes, and dashboard
+- should only be used when the user explicitly wants the old archive shape
+
+## Interaction Style
+
+When the skill is triggered, use a short one-question-at-a-time flow by default.
+
+Collect or confirm:
+1. `input-html`
+2. archive location
+3. taxonomy reference Markdown
+4. whether to keep default `archive-profile=categories-only`
+5. whether to keep default `mode=merge`
+6. final execution confirmation
+
+If the user points to an existing archive and wants `merge`, inspect it first and preserve its established taxonomy unless they explicitly ask for a rewrite.
 
 ## Required User Decision
 
-Before running, confirm where the archive should be stored.
+Before running, confirm:
+- where the archive should live
+- which Markdown file is the classification reference
 
 `target-root` rules:
-- Accept either an absolute path or a relative path.
-- If the user gives a relative path, resolve it relative to the current working directory.
-- If the user says "alongside X Likes" or a similar existing folder reference, infer the parent directory from that known path and state the inferred absolute path before running.
-- If the user says something ambiguous such as `my notes folder`, do not guess between local home, Obsidian vault, or another location. Ask the user which path they want.
-- Do not assume Obsidian unless the user explicitly says Obsidian, vault, or gives an Obsidian path.
-- `state-root` may also be overridden explicitly; otherwise compact mode uses the default external-state rule above.
+- accept an absolute or relative path
+- resolve relative paths against the current working directory
+- if the user gives the final archive folder, normalize it into `target-root=<parent>` and `container-name=<basename>`
+- do not guess ambiguous paths
+
+The taxonomy reference should normally be one of:
+- preferred: an AI-outline taxonomy note such as `ROOT 网页归类母目录.md` with `FORMAT: AI_OUTLINE_V1`
+- fallback: a folder index note with `## 根目录` and `## 全路径检索索引`
+
+Reference priority rules:
+- if a local ROOT outline exists, treat it as the single source of truth
+- if only a folder index exists, use that as a structural fallback
+- do not let the new HTML export override the user's established taxonomy
 
 ## Output Contract
 
-The generated archive lives at:
+For the default `categories-only` profile, the generated archive lives at:
 `<target-root>/<container-name>/`
 
-Default `compact` layout output:
-- `01 Categories/`
-- `02 Links/`
-- `03 Domains/`
-- `00 Reports/`
-- `Dashboard.md`
-- external state root containing:
-  - `state.json`
-  - `latest-summary.json`
-  - `pending_annotations.json`
-  - `excluded_links.json`
+Expected top level:
+- `Index.md`
+- one directory per primary category from the taxonomy reference
 
-Single-folder compact variant when the user asks everything to live under one folder:
-- `01 Categories/`
-- `02 Links/`
-- `03 Domains/`
-- `00 Reports/`
-- `Dashboard.md`
-- `_state/` containing:
-  - `state.json`
-  - `latest-summary.json`
-  - `pending_annotations.json`
-  - `excluded_links.json`
+Expected external state root:
+- `state.json`
+- `latest-summary.json`
 
-Behavior:
-- `01 Categories/` mirrors the HTML folder structure with `Index.md` files.
-- `02 Links/` is a small set of shard files, not one file per URL.
-- `03 Domains/` is a small set of lightweight shard files, not one file per host.
-- `01 Categories/` should use a flattened category-note layout in compact mode: top-level category folders plus branch notes, not thousands of nested folders.
-- `00 Reports/` contains `New Links.md`, `Changed Links.md`, `Removed Links.md`, and `Excluded Links.md`.
-- `Excluded Links.md` records links filtered out as obvious noise so the cleanup stays auditable.
-- compact-layout sync state should live outside the vault/archive to avoid Obsidian indexing large machine-state files.
-- if the user asks for a single-folder archive, move the machine-state directory inside the archive instead of using a sibling `-state` directory.
-- after every write, verify the archive top level contains only the canonical managed paths plus `_state/`; suffix copies such as `01 Categories 2`, `03 Domains 2`, or `Dashboard 2.md` are conflict artifacts and should be removed.
-- `Dashboard.md` should include a compact principal-category overview for quick review.
-- Index files should be outline-friendly in Obsidian: keep grouping headings such as `## host`, and render each web entry as its own heading block such as `### page title` instead of a plain bullet list.
-- Compact category notes should preserve the original hierarchy as headings inside notes rather than as deeply nested filesystem folders.
-- Stdout and `state-root/latest-summary.json` should stay compact; detailed URL lists belong in the Markdown reports, not the terminal summary.
+`categories-only` mapping rules:
+- strip legacy roots such as `书签工具栏 / 无知资源书签 / 无知书签`
+- treat `ROOT` as the logical root only, not a disk folder
+- prefer semantic classification against the local taxonomy tree
+- use title, domain, URL tokens, aliases, and node scope text as the main evidence
+- reuse incoming HTML category names only as weak hints
+- if semantic confidence is strong, place the link directly into the inferred taxonomy path even if the HTML folder disagrees
+- if matching stops at a parent, attach the remaining source subtree under the nearest matched parent
 
-Legacy `per-url` layout is optional and should only be used when the user explicitly wants one Markdown file per URL and accepts the indexing cost.
+Example:
+- if a page is about “AI 帮用户预览沙发放进客厅后的效果”, it should go under `人工智能 / 图像生成 / 室内设计与空间渲染`
+- this remains true even if the incoming HTML placed it under an unrelated folder
 
 ## Workflow
 
-1. Confirm the HTML path and target root.
-   The target root may be absolute or relative, but it must be explicit or safely inferable.
-2. Confirm the layout.
-   Use `compact` by default. Use `per-url` only if the user explicitly wants one note per URL.
-3. Run the sync script in `merge` mode unless the user explicitly wants a rebuild.
-4. Read the JSON summary from stdout or `state-root/latest-summary.json`.
-   The summary should surface counts, the collapsed summary-root path, and principal categories.
-5. If `pending_annotations > 0`, fill descriptions only for those pending URLs.
-6. Re-run the sync script with `--annotations-file`.
-7. Verify that the generated Markdown reflects the updated HTML and that preserved descriptions were not lost.
-8. For single-folder archives in iCloud/Obsidian, verify the top level contains only `00 Reports/`, `01 Categories/`, `02 Links/`, `03 Domains/`, `Dashboard.md`, and `_state/`.
+1. Confirm the HTML path, archive location, and taxonomy reference Markdown.
+2. Parse the taxonomy reference from the local ROOT outline if available; otherwise use the folder-index fallback.
+3. Strip legacy bookmark roots and classify each bookmark semantically into the reference tree.
+4. Render only category directories with `Index.md` files.
+5. Write minimal external state.
+6. Validate with `check_bookmark_archive.py --archive-profile categories-only`.
 
 Health-check command:
 ```bash
-python3 scripts/check_bookmark_archive.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
-  --state-root "/path/to/archive-root/Bookmarks/_state"
+  --state-root "/path/to/state-root" \
+  --archive-profile categories-only
 ```
+
+Legacy full-mode command:
+```bash
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+  --input-html "/path/to/bookmarks.html" \
+  --target-root "/path/to/archive-root" \
+  --container-name "Bookmarks" \
+  --archive-profile full \
+  --layout compact \
+  --mode merge \
+  --title-language zh
+```
+
+## Legacy Full-Mode Notes
+
+The sections below describe older `full`-mode workflows such as external import, pending annotations, autofill, and report-heavy syncs. They are still useful when the user explicitly asks for the old archive shape, but they are no longer the default operating mode of this skill.
 
 ## External Import Into Existing Archive
 
@@ -143,10 +184,10 @@ Recommended strategy:
 
 Use the batch filter helper:
 ```bash
-python3 scripts/filter_pending_annotations.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/filter_pending_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
-  --category-prefix "Research/AI Tools" \
-  --output "/path/to/batches/ai-tools.json"
+  --category-prefix "书签工具栏/无知资源书签/无知网站" \
+  --output "/path/to/batches/wuzhi.json"
 ```
 
 Then fill `description`, optional `note`, and optional `tags` in that batch file and re-run the main sync with `--annotations-file`.
@@ -156,7 +197,7 @@ Then fill `description`, optional `note`, and optional `tags` in that batch file
 When the user explicitly wants everything filled without waiting for review, use the autofill helper to generate first-pass descriptions for every remaining pending URL:
 
 ```bash
-python3 scripts/autofill_annotations.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/autofill_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
   --output "/path/to/batches/autofill-all.json"
 ```
@@ -164,7 +205,7 @@ python3 scripts/autofill_annotations.py \
 Then sync it back:
 
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -192,6 +233,7 @@ Good description examples:
 ## Incremental Rules
 
 - `merge` mode preserves old descriptions, notes, and tags.
+- when merging into an existing archive, preserve the existing archive's language, folder naming, category organization, and report structure unless the user explicitly requests a rewrite
 - A URL missing from a later HTML export is marked as removed and listed in `Removed Links.md`.
 - A new URL appears in `New Links.md` and `state-root/pending_annotations.json` until described.
 - If the same URL appears in multiple HTML folders, keep one URL note and preserve all category paths on that note.
@@ -213,7 +255,7 @@ Filtered links should:
 
 First sync or later incremental sync:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -224,7 +266,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Single-folder compact example:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -236,7 +278,7 @@ python3 scripts/sync_bookmark_html.py \
 
 External HTML import into existing `Bookmarks`:
 ```bash
-python3 scripts/import_external_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/import_external_bookmark_html.py \
   --input-html "/path/to/external-bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -246,7 +288,7 @@ python3 scripts/import_external_bookmark_html.py \
 
 Post-run structure check:
 ```bash
-python3 scripts/check_bookmark_archive.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
   --state-root "/path/to/archive-root/Bookmarks/_state"
@@ -254,7 +296,7 @@ python3 scripts/check_bookmark_archive.py \
 
 Relative-path example:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "./exports/bookmarks.html" \
   --target-root "./notes" \
   --container-name "网页聚合" \
@@ -265,7 +307,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Import descriptions for pending URLs and re-render:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -277,7 +319,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Full rebuild from the latest HTML only:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -288,7 +330,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Legacy per-URL layout:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \

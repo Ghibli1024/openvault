@@ -21,9 +21,11 @@ import os
 import re
 import shutil
 import tempfile
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import DefaultDict, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -41,11 +43,13 @@ ROOT_STATE = Path(".sync-state")
 ROOT_REPORTS = Path("00 Reports")
 
 DASHBOARD_FILE = "Dashboard.md"
+INDEX_FILE = "Index.md"
 NEW_LINKS_FILE = "New Links.md"
 CHANGED_LINKS_FILE = "Changed Links.md"
 REMOVED_LINKS_FILE = "Removed Links.md"
 EXCLUDED_LINKS_FILE = "Excluded Links.md"
-MANAGED_TOP_LEVEL_NAMES = {
+RECLASSIFIED_LINKS_FILE = "Reclassified Main Categories.md"
+FULL_MANAGED_TOP_LEVEL_NAMES = {
     ROOT_REPORTS.name,
     ROOT_CATEGORIES.name,
     ROOT_LINKS.name,
@@ -56,6 +60,37 @@ LATEST_SUMMARY_FILE = "latest-summary.json"
 PENDING_ANNOTATIONS_FILE = "pending_annotations.json"
 EXCLUDED_LINKS_JSON = "excluded_links.json"
 STATE_FILE = "state.json"
+LEGACY_CATEGORY_ROOTS = {"书签工具栏", "无知资源书签", "无知书签"}
+TAXONOMY_PENDING_BUCKET = "待归类"
+WEAK_CATEGORY_SUFFIXES = (
+    "相关",
+    "类别",
+    "分类",
+    "类",
+    "工具",
+    "网站",
+    "资源",
+    "平台",
+    "推荐",
+    "导航",
+    "大全",
+    "合集",
+    "汇总",
+)
+TOKEN_SYNONYMS: Dict[str, Set[str]] = {
+    "试穿": {"试衣", "换装", "穿衣", "穿搭", "上身"},
+    "服饰": {"衣服", "服装", "穿搭", "衣着", "上衣"},
+    "发型": {"头发", "发式"},
+    "图像": {"图片", "照片", "img", "image", "photo"},
+    "生成": {"生图", "绘图", "画图", "作图"},
+    "对话": {"聊天", "chat", "chatbot"},
+    "智能体": {"agent", "agents", "代理"},
+    "聚合": {"集成", "合集", "一站式"},
+    "部署": {"本地部署", "自托管", "搭建", "运行"},
+    "写作": {"写文", "写文章", "文案", "写稿"},
+    "搜索": {"检索", "搜", "find"},
+    "导航": {"入口", "聚合"},
+}
 
 
 LANG_PACKS: Dict[str, Dict[str, str]] = {
@@ -65,12 +100,15 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "changed_links_title": "本次变更链接",
         "removed_links_title": "本次移除链接",
         "excluded_links_title": "已过滤噪音链接",
+        "reclassified_links_title": "主类重映射审计",
         "categories_title": "分类目录",
         "links_title": "链接索引",
         "domains_title": "域名索引",
         "stats_title": "统计",
         "label_layout": "渲染布局",
         "label_state_root": "同步状态目录",
+        "label_taxonomy_reference": "参考分类来源",
+        "label_reclassified": "重映射主类",
         "status_active": "在库",
         "status_removed": "已移除",
         "label_total_bookmarks": "HTML 中书签条目数",
@@ -95,6 +133,17 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "label_bookmark_count": "HTML 中出现次数",
         "label_bookmark_added": "书签添加时间",
         "label_tags": "标签",
+        "label_source_category": "来源主类",
+        "label_target_category": "目标主类",
+        "label_match_mode": "匹配方式",
+        "label_source_paths": "来源路径样例",
+        "label_path_count": "分支路径数",
+        "label_url_count": "URL 数",
+        "label_child_category_count": "直接子分类数",
+        "label_direct_url_count": "当前节点直挂 URL 数",
+        "label_subtree_url_count": "当前子树 URL 总数",
+        "label_archive_profile": "归档模式",
+        "label_top_level_categories": "一级主类",
         "label_entry_note": "详情页",
         "label_open_entry": "打开条目",
         "label_counts": "数量",
@@ -128,12 +177,15 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "changed_links_title": "Changed Links",
         "removed_links_title": "Removed Links",
         "excluded_links_title": "Excluded Noise Links",
+        "reclassified_links_title": "Reclassified Main Categories",
         "categories_title": "Categories",
         "links_title": "Links Index",
         "domains_title": "Domains",
         "stats_title": "Stats",
         "label_layout": "Layout",
         "label_state_root": "State root",
+        "label_taxonomy_reference": "Reference taxonomy",
+        "label_reclassified": "Reclassified main categories",
         "status_active": "Active",
         "status_removed": "Removed",
         "label_total_bookmarks": "Bookmark items in HTML",
@@ -158,6 +210,17 @@ LANG_PACKS: Dict[str, Dict[str, str]] = {
         "label_bookmark_count": "Occurrences in HTML",
         "label_bookmark_added": "Bookmark added at",
         "label_tags": "Tags",
+        "label_source_category": "Source main category",
+        "label_target_category": "Target main category",
+        "label_match_mode": "Match mode",
+        "label_source_paths": "Source path samples",
+        "label_path_count": "Branch paths",
+        "label_url_count": "URLs",
+        "label_child_category_count": "Direct subcategories",
+        "label_direct_url_count": "Direct URLs in node",
+        "label_subtree_url_count": "URLs in subtree",
+        "label_archive_profile": "Archive profile",
+        "label_top_level_categories": "Top-level categories",
         "label_entry_note": "Entry note",
         "label_open_entry": "Open entry",
         "label_counts": "Count",
@@ -199,6 +262,22 @@ class BookmarkEntry:
     category_path: List[str]
     add_date: str
     last_modified: str
+
+
+@dataclass
+class TaxonomyReference:
+    source_path: Path
+    source_format: str
+    root_label: str
+    primary_categories: List[str]
+    normalized_categories: Dict[str, str]
+    reference_paths: List[Tuple[str, ...]]
+    children_by_parent: Dict[Tuple[str, ...], List[str]]
+    normalized_children_by_parent: Dict[Tuple[str, ...], Dict[str, str]]
+    aliases_by_path: Dict[Tuple[str, ...], List[str]]
+    scope_by_path: Dict[Tuple[str, ...], str]
+    own_tokens_by_path: Dict[Tuple[str, ...], Set[str]]
+    subtree_tokens_by_path: Dict[Tuple[str, ...], Set[str]]
 
 
 class BookmarkHTMLParser(HTMLParser):
@@ -273,6 +352,12 @@ def parse_args() -> argparse.Namespace:
         help="Root path where the archive folder should live; accepts absolute or relative paths",
     )
     parser.add_argument(
+        "--archive-profile",
+        choices=["full", "categories-only"],
+        default="full",
+        help="Archive output profile; full keeps legacy reports/indexes, categories-only renders only nested category folders",
+    )
+    parser.add_argument(
         "--layout",
         choices=["compact", "per-url"],
         default="compact",
@@ -313,6 +398,28 @@ def parse_args() -> argparse.Namespace:
         "--summary-path",
         help="Optional path for copying the machine-readable summary JSON",
     )
+    parser.add_argument(
+        "--taxonomy-reference-md",
+        help="Optional Markdown file whose `## 根目录` section defines reference top-level categories",
+    )
+    parser.add_argument(
+        "--taxonomy-scope",
+        choices=["top-level", "full"],
+        default="top-level",
+        help="Taxonomy matching scope; top-level maps only the primary bucket and preserves deeper HTML subtrees",
+    )
+    parser.add_argument(
+        "--unmatched-policy",
+        choices=["nearest", "pending", "preserve-original"],
+        default="nearest",
+        help="How to classify source branches that do not map exactly to the reference taxonomy",
+    )
+    parser.add_argument(
+        "--display-category-source",
+        choices=["reference", "dual", "original"],
+        default="reference",
+        help="Which category path source should be rendered in the archive",
+    )
     return parser.parse_args()
 
 
@@ -334,6 +441,728 @@ def now_iso() -> str:
 
 def clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def unwrap_markdown_label(value: str) -> str:
+    text = clean_text(value)
+    if text.startswith("[[") and text.endswith("]]"):
+        inner = text[2:-2].strip()
+        if "|" in inner:
+            inner = inner.split("|", 1)[1].strip()
+        elif "#" in inner:
+            inner = inner.split("#", 1)[1].strip()
+        return clean_text(inner)
+    return text
+
+
+def strip_legacy_category_roots(parts: Sequence[str]) -> List[str]:
+    cleaned = [clean_text(str(part)) for part in parts if clean_text(str(part))]
+    while cleaned and cleaned[0] in LEGACY_CATEGORY_ROOTS:
+        cleaned.pop(0)
+    return cleaned
+
+
+def normalize_category_label(value: str) -> str:
+    text = clean_text(unwrap_markdown_label(value))
+    if not text:
+        return ""
+    text = re.sub(r"[\(\[（【][^\)\]）】]*[\)\]）】]", " ", text)
+    chars: List[str] = []
+    for ch in text:
+        if ch in {"_", "-", "/", "|", "、", "，", ",", "：", ":", "·"}:
+            chars.append(" ")
+            continue
+        category = unicodedata.category(ch)
+        if category.startswith("S") or category.startswith("P"):
+            chars.append(" ")
+            continue
+        chars.append(ch)
+    text = clean_text("".join(chars).lower())
+    text = re.sub(r"\s+", " ", text)
+    for connector in ("与", "和", "及"):
+        text = text.replace(connector, " ")
+    text = clean_text(text)
+    changed = True
+    while changed and text:
+        changed = False
+        for suffix in WEAK_CATEGORY_SUFFIXES:
+            if text.endswith(suffix) and len(text) > len(suffix):
+                text = clean_text(text[: -len(suffix)])
+                changed = True
+    return text
+
+
+def category_label_tokens(value: str) -> Set[str]:
+    normalized = normalize_category_label(value)
+    if not normalized:
+        return set()
+    tokens: Set[str] = set()
+    for piece in re.split(r"\s+", normalized):
+        if not piece:
+            continue
+        tokens.add(piece)
+        if re.search(r"[\u4e00-\u9fff]", piece):
+            if len(piece) >= 2:
+                for idx in range(len(piece) - 1):
+                    tokens.add(piece[idx : idx + 2])
+        else:
+            for subpiece in re.split(r"[^a-z0-9]+", piece):
+                if subpiece:
+                    tokens.add(subpiece)
+    return tokens
+
+
+def split_taxonomy_label(raw_value: str) -> Tuple[str, str]:
+    text = clean_text(unwrap_markdown_label(raw_value))
+    descriptor = ""
+    trailing = re.match(r"^(.*?)[\(\[（【]([^)\]）】]+)[\)\]）】]\s*$", text)
+    if trailing:
+        text = clean_text(trailing.group(1))
+        descriptor = clean_text(trailing.group(2))
+    text = re.sub(r"^[^\w\u4e00-\u9fff]+", "", text)
+    text = re.sub(r"^📂\s*", "", text)
+    return clean_text(text), descriptor
+
+
+def expand_semantic_tokens(tokens: Set[str]) -> Set[str]:
+    expanded = set(tokens)
+    for token in list(tokens):
+        expanded.update(TOKEN_SYNONYMS.get(token, set()))
+    return expanded
+
+
+def semantic_tokens_for_text(value: str) -> Set[str]:
+    return expand_semantic_tokens(category_label_tokens(value))
+
+
+def semantic_tokens_for_record(record: Dict[str, object]) -> Set[str]:
+    tokens: Set[str] = set()
+    tokens.update(semantic_tokens_for_text(str(record.get("title", ""))))
+    host = str(record.get("host", ""))
+    if host:
+        host_parts = [part for part in re.split(r"[.\-_]+", host) if part]
+        tokens.update(semantic_tokens_for_text(" ".join(host_parts)))
+    url = str(record.get("url", ""))
+    parsed = urlparse(url)
+    path_parts = [part for part in re.split(r"[\/._\-]+", parsed.path) if part]
+    if path_parts:
+        tokens.update(semantic_tokens_for_text(" ".join(path_parts)))
+    query_parts = [part for part in re.split(r"[=&._\-]+", parsed.query) if part]
+    if query_parts:
+        tokens.update(semantic_tokens_for_text(" ".join(query_parts[:12])))
+    return tokens
+
+
+def normalized_source_parts(paths: Sequence[Sequence[str]]) -> Set[str]:
+    values: Set[str] = set()
+    for path in paths:
+        for part in path:
+            normalized = normalize_category_label(str(part))
+            if normalized:
+                values.add(normalized)
+    return values
+
+
+def parse_root_section(lines: Sequence[str]) -> Tuple[str, List[str]]:
+    in_root_section = False
+    root_indent: Optional[int] = None
+    child_indent: Optional[int] = None
+    root_label = ""
+    primary_categories: List[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not in_root_section:
+            if stripped == "## 根目录":
+                in_root_section = True
+            continue
+        if stripped.startswith("## ") and stripped != "## 根目录":
+            break
+        bullet = re.match(r"^(\s*)-\s+(.*\S)\s*$", line)
+        if not bullet:
+            continue
+        indent = len(bullet.group(1).replace("\t", "    "))
+        label = unwrap_markdown_label(bullet.group(2))
+        if not root_label:
+            if label != "ROOT":
+                continue
+            root_label = label
+            root_indent = indent
+            continue
+        if root_indent is None or indent <= root_indent:
+            continue
+        if child_indent is None:
+            child_indent = indent
+        if indent != child_indent:
+            continue
+        if label and label not in primary_categories:
+            primary_categories.append(label)
+    return root_label, primary_categories
+
+
+def parse_full_path_index(lines: Sequence[str]) -> List[Tuple[str, ...]]:
+    in_path_section = False
+    reference_paths: List[Tuple[str, ...]] = []
+    seen: Set[Tuple[str, ...]] = set()
+
+    for line in lines:
+        stripped = line.strip()
+        if not in_path_section:
+            if stripped == "## 全路径检索索引":
+                in_path_section = True
+            continue
+        if stripped.startswith("## ") and stripped != "## 全路径检索索引":
+            break
+        match = re.match(r"^>\s*-\s*`(.+?)`\s*$", stripped)
+        if not match:
+            continue
+        parts = tuple(clean_text(part) for part in match.group(1).split(" / ") if clean_text(part))
+        if not parts or parts in seen:
+            continue
+        seen.add(parts)
+        reference_paths.append(parts)
+    return sorted(reference_paths, key=lambda item: (len(item), [part.lower() for part in item]))
+
+
+def build_taxonomy_children(
+    reference_paths: Sequence[Tuple[str, ...]],
+    aliases_by_path: Optional[Dict[Tuple[str, ...], List[str]]] = None,
+) -> Tuple[Dict[Tuple[str, ...], List[str]], Dict[Tuple[str, ...], Dict[str, str]]]:
+    children: DefaultDict[Tuple[str, ...], Set[str]] = defaultdict(set)
+    for path in reference_paths:
+        for depth in range(len(path) - 1):
+            parent = tuple(path[: depth + 1])
+            children[parent].add(path[depth + 1])
+    children_by_parent = {
+        parent: sorted(values, key=str.lower)
+        for parent, values in children.items()
+    }
+    normalized_children_by_parent: Dict[Tuple[str, ...], Dict[str, str]] = {}
+    for parent, child_names in children_by_parent.items():
+        normalized_map: Dict[str, str] = {}
+        for child in child_names:
+            normalized = normalize_category_label(child)
+            if normalized and normalized not in normalized_map:
+                normalized_map[normalized] = child
+            child_path = parent + (child,)
+            for alias in (aliases_by_path or {}).get(child_path, []):
+                normalized_alias = normalize_category_label(alias)
+                if normalized_alias and normalized_alias not in normalized_map:
+                    normalized_map[normalized_alias] = child
+        normalized_children_by_parent[parent] = normalized_map
+    return children_by_parent, normalized_children_by_parent
+
+
+def build_taxonomy_token_maps(
+    reference_paths: Sequence[Tuple[str, ...]],
+    aliases_by_path: Dict[Tuple[str, ...], List[str]],
+    scope_by_path: Dict[Tuple[str, ...], str],
+) -> Tuple[Dict[Tuple[str, ...], Set[str]], Dict[Tuple[str, ...], Set[str]]]:
+    own_tokens_by_path: Dict[Tuple[str, ...], Set[str]] = {}
+    subtree_tokens_by_path: Dict[Tuple[str, ...], Set[str]] = {}
+
+    for path in reference_paths:
+        own_tokens: Set[str] = set()
+        if path:
+            own_tokens.update(semantic_tokens_for_text(path[-1]))
+        for alias in aliases_by_path.get(path, []):
+            own_tokens.update(semantic_tokens_for_text(alias))
+        scope = scope_by_path.get(path, "")
+        if scope:
+            own_tokens.update(semantic_tokens_for_text(scope))
+        own_tokens_by_path[path] = own_tokens
+
+    for path in sorted(reference_paths, key=len, reverse=True):
+        subtree = set(own_tokens_by_path.get(path, set()))
+        for other in reference_paths:
+            if len(other) > len(path) and other[: len(path)] == path:
+                subtree.update(own_tokens_by_path.get(other, set()))
+        subtree_tokens_by_path[path] = subtree
+    return own_tokens_by_path, subtree_tokens_by_path
+
+
+def parse_ai_outline_reference(lines: Sequence[str], path: Path) -> TaxonomyReference:
+    nodes: List[Tuple[str, str, Dict[str, str]]] = []
+    for line in lines:
+        match = re.match(r"^(3(?:\.\d+)*)\s+(.+?)(?:\s+\|\s+(.+))?$", line.strip())
+        if not match:
+            continue
+        number, raw_label, meta = match.groups()
+        attrs: Dict[str, str] = {}
+        if meta:
+            for part in meta.split(" | "):
+                if "=" not in part:
+                    continue
+                key, value = part.split("=", 1)
+                attrs[key] = value
+        nodes.append((number, raw_label, attrs))
+    if not nodes:
+        raise ValueError(f"failed to parse AI outline taxonomy from: {path}")
+
+    root_label = ""
+    primary_categories: List[str] = []
+    display_path_by_number: Dict[str, Tuple[str, ...]] = {}
+    aliases_by_path: Dict[Tuple[str, ...], List[str]] = defaultdict(list)
+    scope_by_path: Dict[Tuple[str, ...], str] = {}
+    reference_paths: List[Tuple[str, ...]] = []
+    seen_paths: Set[Tuple[str, ...]] = set()
+
+    for number, raw_label, attrs in nodes:
+        label, descriptor = split_taxonomy_label(raw_label)
+        node_type = attrs.get("type", "")
+        parent_number = ".".join(number.split(".")[:-1])
+        parent_display = display_path_by_number.get(parent_number, tuple())
+
+        if node_type == "root":
+            root_label = label or "ROOT"
+            display_path = (root_label,)
+        elif node_type == "macro_group":
+            display_path = parent_display or (root_label,)
+        else:
+            if not parent_display:
+                parent_display = (root_label,)
+            display_path = parent_display + ((label,) if label else tuple())
+            if display_path and display_path not in seen_paths:
+                seen_paths.add(display_path)
+                reference_paths.append(display_path)
+
+        display_path_by_number[number] = display_path
+        if not display_path:
+            continue
+        alias = clean_text(attrs.get("alias", ""))
+        if alias and alias != "-":
+            aliases_by_path[display_path].append(alias)
+        scope_parts = [clean_text(attrs.get("scope", ""))]
+        if descriptor:
+            scope_parts.append(descriptor)
+        scope_text = clean_text(" ".join(part for part in scope_parts if part))
+        if scope_text:
+            scope_by_path[display_path] = scope_text
+        if node_type == "primary_category" and len(display_path) >= 2:
+            category = display_path[-1]
+            if category not in primary_categories:
+                primary_categories.append(category)
+
+    normalized_categories: Dict[str, str] = {}
+    for category in primary_categories:
+        normalized = normalize_category_label(category)
+        if normalized and normalized not in normalized_categories:
+            normalized_categories[normalized] = category
+    for ref_path, aliases in aliases_by_path.items():
+        if len(ref_path) == 2:
+            for alias in aliases:
+                normalized_alias = normalize_category_label(alias)
+                if normalized_alias and normalized_alias not in normalized_categories:
+                    normalized_categories[normalized_alias] = ref_path[-1]
+
+    children_by_parent, normalized_children_by_parent = build_taxonomy_children(reference_paths, aliases_by_path)
+    own_tokens_by_path, subtree_tokens_by_path = build_taxonomy_token_maps(
+        reference_paths,
+        dict(aliases_by_path),
+        scope_by_path,
+    )
+    return TaxonomyReference(
+        source_path=path,
+        source_format="ai_outline_v1",
+        root_label=root_label or "ROOT",
+        primary_categories=primary_categories,
+        normalized_categories=normalized_categories,
+        reference_paths=sorted(reference_paths, key=lambda item: (len(item), [part.lower() for part in item])),
+        children_by_parent=children_by_parent,
+        normalized_children_by_parent=normalized_children_by_parent,
+        aliases_by_path={key: dedupe_strings(value) for key, value in aliases_by_path.items()},
+        scope_by_path=scope_by_path,
+        own_tokens_by_path=own_tokens_by_path,
+        subtree_tokens_by_path=subtree_tokens_by_path,
+    )
+
+
+def parse_taxonomy_reference_markdown(path: Path) -> TaxonomyReference:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if any(line.strip() == "FORMAT: AI_OUTLINE_V1" for line in lines[:20]):
+        return parse_ai_outline_reference(lines, path)
+
+    root_label, primary_categories = parse_root_section(lines)
+    reference_paths = parse_full_path_index(lines)
+    if not root_label or not primary_categories:
+        raise ValueError(f"failed to parse primary taxonomy categories from: {path}")
+    if not reference_paths:
+        raise ValueError(f"failed to parse full taxonomy paths from: {path}")
+
+    first_level_from_paths = sorted(
+        {
+            parts[1]
+            for parts in reference_paths
+            if len(parts) >= 2 and parts[0] == root_label
+        },
+        key=str.lower,
+    )
+    if set(first_level_from_paths) != set(primary_categories):
+        raise ValueError(
+            f"taxonomy root categories do not match full path index in: {path}"
+        )
+
+    normalized_categories: Dict[str, str] = {}
+    for category in primary_categories:
+        normalized = normalize_category_label(category)
+        if normalized and normalized not in normalized_categories:
+            normalized_categories[normalized] = category
+    aliases_by_path: Dict[Tuple[str, ...], List[str]] = {}
+    scope_by_path: Dict[Tuple[str, ...], str] = {}
+    children_by_parent, normalized_children_by_parent = build_taxonomy_children(reference_paths, aliases_by_path)
+    own_tokens_by_path, subtree_tokens_by_path = build_taxonomy_token_maps(
+        reference_paths,
+        aliases_by_path,
+        scope_by_path,
+    )
+    return TaxonomyReference(
+        source_path=path,
+        source_format="path_index_v1",
+        root_label=root_label,
+        primary_categories=primary_categories,
+        normalized_categories=normalized_categories,
+        reference_paths=reference_paths,
+        children_by_parent=children_by_parent,
+        normalized_children_by_parent=normalized_children_by_parent,
+        aliases_by_path=aliases_by_path,
+        scope_by_path=scope_by_path,
+        own_tokens_by_path=own_tokens_by_path,
+        subtree_tokens_by_path=subtree_tokens_by_path,
+    )
+
+
+def resolve_reference_category(
+    source_main: str,
+    reference: TaxonomyReference,
+    unmatched_policy: str,
+) -> Tuple[str, str, str, str]:
+    clean_source = clean_text(source_main)
+    if clean_source in reference.primary_categories:
+        return clean_source, "exact", normalize_category_label(clean_source), normalize_category_label(clean_source)
+
+    normalized_source = normalize_category_label(clean_source)
+    if normalized_source and normalized_source in reference.normalized_categories:
+        target = reference.normalized_categories[normalized_source]
+        return target, "normalized", normalized_source, normalize_category_label(target)
+
+    if unmatched_policy == "preserve-original":
+        return clean_source or TAXONOMY_PENDING_BUCKET, "preserve-original", normalized_source, normalized_source
+    if unmatched_policy == "pending":
+        return TAXONOMY_PENDING_BUCKET, "pending", normalized_source, normalize_category_label(TAXONOMY_PENDING_BUCKET)
+
+    source_tokens = category_label_tokens(clean_source)
+    best_target = reference.primary_categories[0]
+    best_score: Tuple[int, int, float] = (-1, -1, -1.0)
+    for target in reference.primary_categories:
+        normalized_target = normalize_category_label(target)
+        target_tokens = category_label_tokens(target)
+        overlap = len(source_tokens & target_tokens)
+        containment = 1 if normalized_source and normalized_target and (
+            normalized_source in normalized_target or normalized_target in normalized_source
+        ) else 0
+        ratio = SequenceMatcher(None, normalized_source or clean_source, normalized_target or target.lower()).ratio()
+        score = (overlap, containment, ratio)
+        if score > best_score:
+            best_target = target
+            best_score = score
+    return best_target, "nearest", normalized_source, normalize_category_label(best_target)
+
+
+def select_display_category_paths(
+    reference_paths: Sequence[Sequence[str]],
+    source_paths: Sequence[Sequence[str]],
+    display_source: str,
+) -> List[List[str]]:
+    if display_source == "original":
+        return dedupe_paths(source_paths)
+    if display_source == "dual":
+        return dedupe_paths(list(reference_paths) + list(source_paths))
+    return dedupe_paths(reference_paths)
+
+
+def match_reference_child(
+    parent: Tuple[str, ...],
+    source_part: str,
+    reference: TaxonomyReference,
+) -> Tuple[Optional[str], str]:
+    child_names = reference.children_by_parent.get(parent, [])
+    if source_part in child_names:
+        return source_part, "exact"
+    normalized_source = normalize_category_label(source_part)
+    if normalized_source:
+        target = reference.normalized_children_by_parent.get(parent, {}).get(normalized_source)
+        if target:
+            return target, "normalized"
+    return None, ""
+
+
+def map_reference_path_full(
+    source_path: Sequence[str],
+    reference: TaxonomyReference,
+    unmatched_policy: str,
+) -> Tuple[List[str], str, str, str]:
+    effective_parts = strip_legacy_category_roots(source_path)
+    if not effective_parts:
+        return [reference.root_label], "exact", "", ""
+
+    matched_parts = [reference.root_label]
+    current = (reference.root_label,)
+    consumed = 0
+    match_mode = "exact"
+
+    for source_part in effective_parts:
+        target_part, step_mode = match_reference_child(current, source_part, reference)
+        if target_part is None:
+            break
+        matched_parts.append(target_part)
+        current = tuple(matched_parts)
+        consumed += 1
+        if step_mode == "normalized":
+            match_mode = "normalized"
+
+    if consumed == 0:
+        target_main, fallback_mode, normalized_source, normalized_target = resolve_reference_category(
+            effective_parts[0],
+            reference,
+            unmatched_policy,
+        )
+        matched_parts = [reference.root_label, target_main]
+        consumed = 1
+        current = tuple(matched_parts)
+        match_mode = fallback_mode
+    else:
+        normalized_source = normalize_category_label(effective_parts[0])
+        normalized_target = normalize_category_label(matched_parts[1]) if len(matched_parts) > 1 else ""
+
+    return matched_parts + effective_parts[consumed:], match_mode, normalized_source, normalized_target
+
+
+def semantic_match_score(
+    candidate_path: Tuple[str, ...],
+    feature_tokens: Set[str],
+    source_norm_parts: Set[str],
+    reference: TaxonomyReference,
+) -> int:
+    own_tokens = reference.own_tokens_by_path.get(candidate_path, set())
+    subtree_tokens = reference.subtree_tokens_by_path.get(candidate_path, own_tokens)
+    score = 0
+    score += 6 * len(feature_tokens & own_tokens)
+    score += 2 * len(feature_tokens & subtree_tokens)
+    candidate_norm = normalize_category_label(candidate_path[-1]) if candidate_path else ""
+    if candidate_norm and candidate_norm in source_norm_parts:
+        score += 8
+    for alias in reference.aliases_by_path.get(candidate_path, []):
+        normalized_alias = normalize_category_label(alias)
+        if normalized_alias and normalized_alias in source_norm_parts:
+            score += 8
+    return score
+
+
+def classify_record_semantically(
+    record: Dict[str, object],
+    reference: TaxonomyReference,
+) -> Tuple[List[str], str]:
+    raw_source_paths = record.get("source_category_paths", record.get("category_paths", [[]]))
+    if not isinstance(raw_source_paths, list) or not raw_source_paths:
+        raw_source_paths = [[]]
+    normalized_paths = dedupe_paths(
+        [reference.root_label, *strip_legacy_category_roots(parts)] for parts in raw_source_paths
+    )
+    source_norm_parts = normalized_source_parts(normalized_paths)
+    feature_tokens = semantic_tokens_for_record(record)
+
+    root = (reference.root_label,)
+    current = root
+    chosen_path = [reference.root_label]
+    overall_mode = "semantic"
+
+    while True:
+        children = reference.children_by_parent.get(current, [])
+        if not children:
+            break
+        scored: List[Tuple[int, str]] = []
+        exact_match_child = ""
+        normalized_match_child = ""
+        normalized_child_map = reference.normalized_children_by_parent.get(current, {})
+        for source_norm in source_norm_parts:
+            target = normalized_child_map.get(source_norm, "")
+            if target:
+                normalized_match_child = target
+                break
+        for child in children:
+            child_path = current + (child,)
+            score = semantic_match_score(child_path, feature_tokens, source_norm_parts, reference)
+            scored.append((score, child))
+            normalized_child = normalize_category_label(child)
+            if normalized_child and normalized_child in source_norm_parts:
+                exact_match_child = child
+        scored.sort(key=lambda item: (-item[0], item[1].lower()))
+        if exact_match_child:
+            best_child = exact_match_child
+            best_score = next((score for score, child in scored if child == best_child), 0)
+            if overall_mode == "semantic":
+                overall_mode = "source-exact"
+        elif normalized_match_child:
+            best_child = normalized_match_child
+            best_score = next((score for score, child in scored if child == best_child), 0)
+            if overall_mode == "semantic":
+                overall_mode = "source-normalized"
+        else:
+            best_score, best_child = scored[0]
+
+        second_score = scored[1][0] if len(scored) > 1 else -1
+        if best_score <= 0:
+            break
+        if best_score < 4 and second_score >= best_score:
+            break
+        chosen_path.append(best_child)
+        current = tuple(chosen_path)
+
+    if len(chosen_path) == 1:
+        fallback_target, _, _, _ = resolve_reference_category(
+            str(record.get("title", "")) or str(record.get("host", "")),
+            reference,
+            "nearest",
+        )
+        chosen_path.append(fallback_target)
+        overall_mode = "fallback"
+    return chosen_path, overall_mode
+
+
+def apply_semantic_taxonomy_from_root_outline(
+    records: Dict[str, Dict[str, object]],
+    reference: TaxonomyReference,
+    display_source: str,
+) -> Tuple[Dict[str, Dict[str, object]], List[Dict[str, object]]]:
+    remapped: Dict[str, Dict[str, object]] = {}
+    audit_counts: Counter[str] = Counter()
+
+    for url, record in records.items():
+        raw_paths = record.get("source_category_paths", record.get("category_paths", [[]]))
+        if not isinstance(raw_paths, list) or not raw_paths:
+            raw_paths = [[]]
+        source_category_paths = dedupe_paths(raw_paths)
+        semantic_path, match_mode = classify_record_semantically(record, reference)
+        audit_counts[match_mode] += 1
+        next_record = dict(record)
+        next_record["source_category_paths"] = source_category_paths
+        next_record["category_paths"] = select_display_category_paths(
+            reference_paths=[semantic_path],
+            source_paths=source_category_paths,
+            display_source=display_source,
+        )
+        next_record["category_classification_mode"] = match_mode
+        remapped[url] = next_record
+
+    audit_entries = [
+        {
+            "source_main_category": mode,
+            "target_main_category": mode,
+            "match_mode": mode,
+            "normalized_source": mode,
+            "normalized_target": mode,
+            "path_count": 0,
+            "url_count": count,
+            "sample_source_paths": [],
+        }
+        for mode, count in sorted(audit_counts.items())
+        if mode not in {"source-exact", "source-normalized", "semantic"}
+    ]
+    return remapped, audit_entries
+
+
+def apply_reference_taxonomy(
+    records: Dict[str, Dict[str, object]],
+    reference: TaxonomyReference,
+    taxonomy_scope: str,
+    unmatched_policy: str,
+    display_source: str,
+) -> Tuple[Dict[str, Dict[str, object]], List[Dict[str, object]]]:
+    if reference.source_format == "ai_outline_v1":
+        return apply_semantic_taxonomy_from_root_outline(records, reference, display_source)
+    if taxonomy_scope not in {"top-level", "full"}:
+        raise ValueError(f"unsupported taxonomy scope: {taxonomy_scope}")
+
+    remapped: Dict[str, Dict[str, object]] = {}
+    audit_map: Dict[str, Dict[str, object]] = {}
+
+    for url, record in records.items():
+        raw_paths = record.get("category_paths", [[]])
+        if not isinstance(raw_paths, list) or not raw_paths:
+            raw_paths = [[]]
+        source_category_paths = dedupe_paths(raw_paths)
+        normalized_source_paths = dedupe_paths(
+            [reference.root_label, *strip_legacy_category_roots(parts)] for parts in raw_paths
+        )
+        reference_paths: List[List[str]] = []
+        for normalized_source_path in normalized_source_paths:
+            effective_parts = list(normalized_source_path[1:]) if normalized_source_path else []
+            if not effective_parts:
+                reference_paths.append([reference.root_label])
+                continue
+            source_main = effective_parts[0]
+            if taxonomy_scope == "full":
+                reference_path, match_mode, normalized_source, normalized_target = map_reference_path_full(
+                    effective_parts,
+                    reference,
+                    unmatched_policy,
+                )
+                target_main = reference_path[1] if len(reference_path) > 1 else reference.root_label
+            else:
+                target_main, match_mode, normalized_source, normalized_target = resolve_reference_category(
+                    source_main,
+                    reference,
+                    unmatched_policy,
+                )
+                reference_path = [reference.root_label, target_main, *effective_parts[1:]]
+            reference_paths.append(reference_path)
+            if match_mode not in {"normalized", "nearest"}:
+                continue
+            audit = audit_map.setdefault(
+                source_main,
+                {
+                    "source_main_category": source_main,
+                    "target_main_category": target_main,
+                    "match_mode": match_mode,
+                    "normalized_source": normalized_source,
+                    "normalized_target": normalized_target,
+                    "_urls": set(),
+                    "_paths": set(),
+                    "_samples": [],
+                },
+            )
+            audit["_urls"].add(url)
+            path_key = tuple(effective_parts)
+            if path_key not in audit["_paths"]:
+                audit["_paths"].add(path_key)
+                if len(audit["_samples"]) < 5:
+                    audit["_samples"].append([reference.root_label, *effective_parts])
+
+        next_record = dict(record)
+        next_record["source_category_paths"] = source_category_paths
+        next_record["category_paths"] = select_display_category_paths(
+            reference_paths=reference_paths,
+            source_paths=normalized_source_paths,
+            display_source=display_source,
+        )
+        remapped[url] = next_record
+
+    audit_entries: List[Dict[str, object]] = []
+    for source_main in sorted(audit_map, key=str.lower):
+        payload = audit_map[source_main]
+        audit_entries.append(
+            {
+                "source_main_category": payload["source_main_category"],
+                "target_main_category": payload["target_main_category"],
+                "match_mode": payload["match_mode"],
+                "normalized_source": payload["normalized_source"],
+                "normalized_target": payload["normalized_target"],
+                "path_count": len(payload["_paths"]),
+                "url_count": len(payload["_urls"]),
+                "sample_source_paths": payload["_samples"],
+            }
+        )
+    return remapped, audit_entries
 
 
 def short_hash(value: str, length: int = 8) -> str:
@@ -647,6 +1476,7 @@ def source_fingerprint(record: Dict[str, object]) -> str:
         "title": record.get("title", ""),
         "titles": list(record.get("titles", [])),
         "category_paths": list(record.get("category_paths", [])),
+        "source_category_paths": list(record.get("source_category_paths", [])),
         "bookmark_count": int(record.get("bookmark_count", 0)),
         "bookmark_add_dates": list(record.get("bookmark_add_dates", [])),
         "bookmark_last_modified_dates": list(record.get("bookmark_last_modified_dates", [])),
@@ -681,6 +1511,19 @@ def merge_records(
         previous = previous_records.get(url) if isinstance(previous_records, dict) else None
         previous = previous if isinstance(previous, dict) else None
         annotation = annotations.get(url, {})
+
+        # In merge mode, keep existing category placement for URLs we already know.
+        # This preserves the user's established archive taxonomy instead of
+        # reclassifying the whole archive from the latest HTML export.
+        if mode == "merge" and previous:
+            previous_category_paths = previous.get("category_paths", [])
+            if isinstance(previous_category_paths, list) and previous_category_paths:
+                current["category_paths"] = previous_category_paths
+        previous_source_paths = previous.get("source_category_paths", []) if previous else []
+        current_source_paths = current.get("source_category_paths", [])
+        if (not isinstance(current_source_paths, list) or not current_source_paths) and isinstance(previous_source_paths, list):
+            current["source_category_paths"] = previous_source_paths
+
         description = clean_text(str(annotation.get("description") or (previous or {}).get("description", "")))
         note = clean_text(str(annotation.get("note") or (previous or {}).get("note", "")))
         existing_tags = previous.get("tags", []) if previous else []
@@ -774,6 +1617,27 @@ def active_records(state: Dict[str, object]) -> Dict[str, Dict[str, object]]:
     }
 
 
+def reclassify_state_records(
+    state: Dict[str, object],
+    reference: TaxonomyReference,
+    display_source: str,
+) -> Tuple[Dict[str, object], List[Dict[str, object]]]:
+    raw = state.get("records", {})
+    if not isinstance(raw, dict):
+        return state, []
+    active = active_records(state)
+    remapped_active, audit = apply_semantic_taxonomy_from_root_outline(active, reference, display_source)
+    merged_records = dict(raw)
+    for url, record in remapped_active.items():
+        next_record = dict(merged_records.get(url, {}))
+        next_record.update(record)
+        next_record["source_signature"] = source_fingerprint(next_record)
+        merged_records[url] = next_record
+    next_state = dict(state)
+    next_state["records"] = merged_records
+    return next_state, audit
+
+
 def removed_records(state: Dict[str, object]) -> Dict[str, Dict[str, object]]:
     raw = state.get("records", {})
     if not isinstance(raw, dict):
@@ -859,6 +1723,59 @@ def build_category_fs_map(
 
     visit(tuple())
     return mapping
+
+
+def build_direct_category_fs_map(
+    folder_children: DefaultDict[Tuple[str, ...], Set[str]]
+) -> Dict[Tuple[str, ...], Path]:
+    mapping: Dict[Tuple[str, ...], Path] = {tuple(): Path()}
+
+    def visit(parent: Tuple[str, ...]) -> None:
+        used: Dict[str, str] = {}
+        for child in sorted(folder_children.get(parent, set()), key=lambda value: value.lower()):
+            base = sanitize_filename(child, default="Category")
+            candidate = base
+            if candidate in used and used[candidate] != child:
+                candidate = f"{base}-{short_hash(child, 6)}"
+            used[candidate] = child
+            child_key = parent + (child,)
+            mapping[child_key] = mapping[parent] / candidate
+            visit(child_key)
+
+    visit(tuple())
+    return mapping
+
+
+def records_without_logical_root(
+    records: Dict[str, Dict[str, object]],
+    root_label: str,
+) -> Dict[str, Dict[str, object]]:
+    out: Dict[str, Dict[str, object]] = {}
+    for url, record in records.items():
+        next_record = dict(record)
+        rootless_paths: List[List[str]] = []
+        for parts in record.get("category_paths", [[]]):
+            if not isinstance(parts, list):
+                continue
+            cleaned = [clean_text(str(part)) for part in parts if clean_text(str(part))]
+            if cleaned and cleaned[0] == root_label:
+                cleaned = cleaned[1:]
+            rootless_paths.append(cleaned)
+        next_record["category_paths"] = dedupe_paths(rootless_paths or [[]])
+        out[url] = next_record
+    return out
+
+
+def top_level_categories_from_records(
+    records: Dict[str, Dict[str, object]],
+    root_label: str,
+) -> Set[str]:
+    categories: Set[str] = set()
+    for record in records_without_logical_root(records, root_label).values():
+        for parts in record.get("category_paths", [[]]):
+            if isinstance(parts, list) and parts:
+                categories.add(str(parts[0]))
+    return categories
 
 
 def compact_top_category_rel_dir(top_key: Tuple[str, ...]) -> Path:
@@ -1529,6 +2446,59 @@ def render_category_index(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_minimal_link_line(record: Dict[str, object]) -> str:
+    title = str(record.get("title", "Untitled"))
+    url = str(record.get("url", ""))
+    host = str(record.get("host", ""))
+    if host:
+        return f"- [{title}]({url}) · `{host}`"
+    return f"- [{title}]({url})"
+
+
+def render_direct_category_index(
+    category_key: Tuple[str, ...],
+    folder_children: DefaultDict[Tuple[str, ...], Set[str]],
+    folder_direct_links: DefaultDict[Tuple[str, ...], List[Dict[str, object]]],
+    folder_all_urls: DefaultDict[Tuple[str, ...], Set[str]],
+    category_paths: Dict[Tuple[str, ...], Path],
+    root_label: str,
+) -> str:
+    current_path = category_paths[category_key] / INDEX_FILE
+    logical_path = [root_label, *category_key] if category_key else [root_label]
+    child_names = sorted(folder_children.get(category_key, set()), key=lambda value: value.lower())
+    direct_links = sort_records(folder_direct_links.get(category_key, []))
+
+    lines = [
+        f"# {display_category_path(logical_path)}",
+        "",
+        f"- {t('label_subtree_url_count')}: {len(folder_all_urls.get(category_key, set()))}",
+        f"- {t('label_direct_url_count')}: {len(direct_links)}",
+        f"- {t('label_child_category_count')}: {len(child_names)}",
+        "",
+    ]
+
+    if child_names:
+        lines.extend([f"## {t('section_subcategories')}", ""])
+        for child in child_names:
+            child_key = category_key + (child,)
+            child_path = category_paths[child_key] / INDEX_FILE
+            rel = markdown_rel_path(current_path, child_path)
+            count = len(folder_all_urls.get(child_key, set()))
+            lines.append(f"- [{child}]({rel}) ({count})")
+        lines.append("")
+
+    if direct_links:
+        heading = t("section_direct_links") if category_key else t("section_root_links")
+        lines.extend([f"## {heading}", ""])
+        for record in direct_links:
+            lines.append(render_minimal_link_line(record))
+        lines.append("")
+
+    if not child_names and not direct_links:
+        lines.append(t("empty_report"))
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render_change_report(
     title: str,
     urls: Sequence[str],
@@ -1588,6 +2558,38 @@ def render_excluded_report(records: Dict[str, Dict[str, object]]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_reclassified_report(records: Sequence[Dict[str, object]]) -> str:
+    lines = [f"# {t('reclassified_links_title')}", ""]
+    if not records:
+        lines.append(t("empty_report"))
+        return "\n".join(lines) + "\n"
+    lines.append(f"- {t('label_counts')}: {len(records)}")
+    lines.append("")
+    for record in records:
+        source_main = str(record.get("source_main_category", ""))
+        target_main = str(record.get("target_main_category", ""))
+        match_mode = str(record.get("match_mode", ""))
+        lines.append(f"## {source_main} -> {target_main}")
+        lines.append("")
+        lines.append(f"- {t('label_source_category')}: {source_main}")
+        lines.append(f"- {t('label_target_category')}: {target_main}")
+        lines.append(f"- {t('label_match_mode')}: `{match_mode}`")
+        lines.append(f"- {t('label_path_count')}: {record.get('path_count', 0)}")
+        lines.append(f"- {t('label_url_count')}: {record.get('url_count', 0)}")
+        normalized_source = clean_text(str(record.get("normalized_source", ""))) or t("none")
+        normalized_target = clean_text(str(record.get("normalized_target", ""))) or t("none")
+        lines.append(f"- normalized_source: `{normalized_source}`")
+        lines.append(f"- normalized_target: `{normalized_target}`")
+        sample_paths = record.get("sample_source_paths", [])
+        if isinstance(sample_paths, list) and sample_paths:
+            lines.append(f"- {t('label_source_paths')}:")
+            for parts in sample_paths:
+                if isinstance(parts, list):
+                    lines.append(f"  - `{display_category_path(parts)}`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def render_dashboard(
     entries_count: int,
     unique_count: int,
@@ -1604,6 +2606,8 @@ def render_dashboard(
     layout: str,
     summary_root: Tuple[str, ...],
     principal_category_items: Sequence[Dict[str, object]],
+    taxonomy_reference: Optional[TaxonomyReference] = None,
+    taxonomy_audit: Optional[Sequence[Dict[str, object]]] = None,
 ) -> str:
     lines = [
         f"# {t('dashboard_title')}",
@@ -1624,26 +2628,40 @@ def render_dashboard(
         f"- {t('label_state_root')}: `{state_root}`",
         f"- {t('label_last_sync')}: {state.get('last_sync_at', '')}",
         f"- {t('label_source_html')}: {source_html}",
-        "",
-        f"## {t('section_principal_categories')}",
-        "",
-        f"- {t('label_summary_root')}: {display_category_path(summary_root)}",
-        "",
     ]
+    if taxonomy_reference is not None:
+        lines.append(f"- {t('label_taxonomy_reference')}: `{taxonomy_reference.source_path}`")
+        lines.append(f"- {t('label_reclassified')}: {len(taxonomy_audit or [])}")
+    lines.extend(
+        [
+            "",
+            f"## {t('section_principal_categories')}",
+            "",
+            f"- {t('label_summary_root')}: {display_category_path(summary_root)}",
+            "",
+        ]
+    )
     if principal_category_items:
         for item in principal_category_items:
             lines.append(f"- {item['name']} ({item['count']})")
     else:
         lines.append(f"- {t('empty_report')}")
+    recent_change_links = [
+        f"- [{t('new_links_title')}]({(ROOT_REPORTS / NEW_LINKS_FILE).as_posix()})",
+        f"- [{t('changed_links_title')}]({(ROOT_REPORTS / CHANGED_LINKS_FILE).as_posix()})",
+        f"- [{t('removed_links_title')}]({(ROOT_REPORTS / REMOVED_LINKS_FILE).as_posix()})",
+        f"- [{t('excluded_links_title')}]({(ROOT_REPORTS / EXCLUDED_LINKS_FILE).as_posix()})",
+    ]
+    if taxonomy_reference is not None:
+        recent_change_links.append(
+            f"- [{t('reclassified_links_title')}]({(ROOT_REPORTS / RECLASSIFIED_LINKS_FILE).as_posix()})"
+        )
     lines.extend(
         [
             "",
             f"## {t('section_recent_changes')}",
             "",
-            f"- [{t('new_links_title')}]({(ROOT_REPORTS / NEW_LINKS_FILE).as_posix()})",
-            f"- [{t('changed_links_title')}]({(ROOT_REPORTS / CHANGED_LINKS_FILE).as_posix()})",
-            f"- [{t('removed_links_title')}]({(ROOT_REPORTS / REMOVED_LINKS_FILE).as_posix()})",
-            f"- [{t('excluded_links_title')}]({(ROOT_REPORTS / EXCLUDED_LINKS_FILE).as_posix()})",
+            *recent_change_links,
             "",
             f"## {t('section_links')}",
             "",
@@ -1694,10 +2712,38 @@ def sync_path_in_place(source: Path, target: Path) -> None:
     os.replace(temp_target, target)
 
 
-def replace_target(target_root: Path, stage_root: Path) -> None:
+def replace_target(
+    target_root: Path,
+    stage_root: Path,
+    archive_profile: str = "full",
+    previous_top_level_categories: Optional[Set[str]] = None,
+    preserve_entry_names: Optional[Set[str]] = None,
+) -> None:
     target_root.mkdir(parents=True, exist_ok=True)
     stage_names = {child.name for child in stage_root.iterdir()}
-    for managed_name in sorted(MANAGED_TOP_LEVEL_NAMES):
+    preserved = set(preserve_entry_names or set())
+    if archive_profile == "categories-only":
+        stale_top_level_dirs = set(previous_top_level_categories or set())
+        for managed_name in sorted(FULL_MANAGED_TOP_LEVEL_NAMES):
+            target = target_root / managed_name
+            if target.exists() and managed_name not in stage_names:
+                remove_path(target)
+        for stale_dir in sorted(stale_top_level_dirs - stage_names):
+            target = target_root / stale_dir
+            if stale_dir in preserved:
+                continue
+            if target.exists() and target.is_dir() and not target.name.startswith("."):
+                remove_path(target)
+        for path in target_root.iterdir():
+            if path.name.startswith(".") or path.name in stage_names or path.name in preserved or not path.is_dir():
+                continue
+            if (path / INDEX_FILE).exists():
+                remove_path(path)
+        for child in stage_root.iterdir():
+            sync_path_in_place(child, target_root / child.name)
+        return
+
+    for managed_name in sorted(FULL_MANAGED_TOP_LEVEL_NAMES):
         source = stage_root / managed_name
         target = target_root / managed_name
         if source.exists():
@@ -1761,25 +2807,30 @@ def cleanup_known_conflict_copies(target_root: Path) -> None:
         return
     for path in target_root.iterdir():
         name = path.name
-        if name in MANAGED_TOP_LEVEL_NAMES or name in {"_state", ROOT_STATE.name}:
+        if name in FULL_MANAGED_TOP_LEVEL_NAMES or name in {"_state", ROOT_STATE.name}:
             continue
         if not any(name == prefix or name.startswith(f"{prefix} ") for prefix in managed_prefixes):
             continue
         remove_path(path)
 
 
-def expected_top_level_names(state_root: Path, target_root: Path) -> Set[str]:
-    names = set(MANAGED_TOP_LEVEL_NAMES)
+def expected_top_level_names(state_root: Path, target_root: Path, archive_profile: str = "full") -> Set[str]:
+    if archive_profile == "categories-only":
+        names = {INDEX_FILE}
+    else:
+        names = set(FULL_MANAGED_TOP_LEVEL_NAMES)
     if is_within(state_root, target_root):
         names.add(state_root.name)
     return names
 
 
-def archive_structure_report(target_root: Path, state_root: Path) -> Dict[str, object]:
-    expected_names = expected_top_level_names(state_root, target_root)
+def archive_structure_report(target_root: Path, state_root: Path, archive_profile: str = "full") -> Dict[str, object]:
+    expected_names = expected_top_level_names(state_root, target_root, archive_profile)
+    state_root_name = state_root.name if is_within(state_root, target_root) else ""
     report: Dict[str, object] = {
         "target_root": str(target_root),
         "state_root": str(state_root),
+        "archive_profile": archive_profile,
         "expected_top_level": sorted(expected_names),
         "top_level_entries": [],
         "missing_top_level": [],
@@ -1796,8 +2847,21 @@ def archive_structure_report(target_root: Path, state_root: Path) -> Dict[str, o
 
     top_level_entries = sorted(path.name for path in target_root.iterdir())
     report["top_level_entries"] = top_level_entries
-    report["missing_top_level"] = sorted(name for name in expected_names if not (target_root / name).exists())
-    report["unexpected_top_level"] = sorted(name for name in top_level_entries if name not in expected_names)
+    if archive_profile == "categories-only":
+        if not (target_root / INDEX_FILE).exists():
+            report["missing_top_level"].append(INDEX_FILE)
+        category_dirs = [
+            path.name
+            for path in target_root.iterdir()
+            if path.is_dir() and not path.name.startswith(".") and path.name != state_root_name
+        ]
+        report["top_level_category_dirs"] = sorted(category_dirs)
+        if not category_dirs:
+            report["missing_top_level"].append("<top-level-category-dir>")
+        report["unexpected_top_level"] = []
+    else:
+        report["missing_top_level"] = sorted(name for name in expected_names if not (target_root / name).exists())
+        report["unexpected_top_level"] = sorted(name for name in top_level_entries if name not in expected_names)
 
     managed_prefixes = {
         ROOT_REPORTS.name,
@@ -1810,23 +2874,28 @@ def archive_structure_report(target_root: Path, state_root: Path) -> Dict[str, o
     for name in top_level_entries:
         if name in expected_names:
             continue
+        if archive_profile == "categories-only" and (target_root / name).is_dir():
+            continue
         if any(name == prefix or name.startswith(f"{prefix} ") for prefix in managed_prefixes):
             conflict_copies.append(name)
     report["conflict_copies"] = sorted(conflict_copies)
 
-    required_state_files = [
-        STATE_FILE,
-        LATEST_SUMMARY_FILE,
-        PENDING_ANNOTATIONS_FILE,
-        EXCLUDED_LINKS_JSON,
-    ]
+    if archive_profile == "categories-only":
+        required_state_files = [STATE_FILE, LATEST_SUMMARY_FILE, INDEX_FILE]
+    else:
+        required_state_files = [
+            STATE_FILE,
+            LATEST_SUMMARY_FILE,
+            INDEX_FILE,
+            PENDING_ANNOTATIONS_FILE,
+            EXCLUDED_LINKS_JSON,
+        ]
     report["missing_state_files"] = sorted(
         filename for filename in required_state_files if not (state_root / filename).exists()
     )
     report["ok"] = not any(
         [
             report["missing_top_level"],
-            report["unexpected_top_level"],
             report["conflict_copies"],
             report["missing_state_files"],
         ]
@@ -1834,8 +2903,8 @@ def archive_structure_report(target_root: Path, state_root: Path) -> Dict[str, o
     return report
 
 
-def ensure_archive_structure(target_root: Path, state_root: Path) -> None:
-    report = archive_structure_report(target_root, state_root)
+def ensure_archive_structure(target_root: Path, state_root: Path, archive_profile: str = "full") -> None:
+    report = archive_structure_report(target_root, state_root, archive_profile)
     if report["ok"]:
         return
     raise RuntimeError(json.dumps(report, ensure_ascii=False, indent=2))
@@ -1858,8 +2927,22 @@ def build_summary(
     principal_category_items: Sequence[Dict[str, object]],
     rendered_files: int,
     rendered_dirs: int,
+    taxonomy_reference: Optional[TaxonomyReference] = None,
+    taxonomy_audit: Optional[Sequence[Dict[str, object]]] = None,
 ) -> Dict[str, object]:
     sample_limit = 20
+    reports = {
+        "dashboard": str(target_root / DASHBOARD_FILE),
+        "new_links": str(target_root / ROOT_REPORTS / NEW_LINKS_FILE),
+        "changed_links": str(target_root / ROOT_REPORTS / CHANGED_LINKS_FILE),
+        "removed_links": str(target_root / ROOT_REPORTS / REMOVED_LINKS_FILE),
+        "excluded_links": str(target_root / ROOT_REPORTS / EXCLUDED_LINKS_FILE),
+        "categories_index": str(target_root / ROOT_CATEGORIES / "Index.md"),
+        "links_index": str(target_root / ROOT_LINKS / "Index.md"),
+        "domains_index": str(target_root / ROOT_DOMAINS / "Index.md"),
+    }
+    if taxonomy_reference is not None:
+        reports["reclassified_main_categories"] = str(target_root / ROOT_REPORTS / RECLASSIFIED_LINKS_FILE)
     return {
         "container_root": str(target_root),
         "source_html": str(source_html),
@@ -1880,6 +2963,7 @@ def build_summary(
         "state_root": str(state_root),
         "summary_root_path": list(summary_root),
         "principal_categories": list(principal_category_items),
+        "reclassified_main_categories": len(taxonomy_audit or []),
         "sample_limit": sample_limit,
         "new_url_sample": changes["new"][:sample_limit],
         "changed_url_sample": changes["changed"][:sample_limit],
@@ -1889,17 +2973,223 @@ def build_summary(
         "excluded_links_path": str(target_root / ROOT_REPORTS / EXCLUDED_LINKS_FILE),
         "excluded_links_json_path": str(state_root / EXCLUDED_LINKS_JSON),
         "latest_summary_path": str(state_root / LATEST_SUMMARY_FILE),
-        "reports": {
-            "dashboard": str(target_root / DASHBOARD_FILE),
-            "new_links": str(target_root / ROOT_REPORTS / NEW_LINKS_FILE),
-            "changed_links": str(target_root / ROOT_REPORTS / CHANGED_LINKS_FILE),
-            "removed_links": str(target_root / ROOT_REPORTS / REMOVED_LINKS_FILE),
-            "excluded_links": str(target_root / ROOT_REPORTS / EXCLUDED_LINKS_FILE),
-            "categories_index": str(target_root / ROOT_CATEGORIES / "Index.md"),
-            "links_index": str(target_root / ROOT_LINKS / "Index.md"),
-            "domains_index": str(target_root / ROOT_DOMAINS / "Index.md"),
-        },
+        "reports": reports,
+        "taxonomy_reference_md": str(taxonomy_reference.source_path) if taxonomy_reference is not None else "",
     }
+
+
+def build_categories_only_summary(
+    entries_count: int,
+    unique_count: int,
+    target_root: Path,
+    state_root: Path,
+    changes: Dict[str, List[str]],
+    active: Dict[str, Dict[str, object]],
+    excluded_records: Dict[str, Dict[str, object]],
+    folder_all_urls: DefaultDict[Tuple[str, ...], Set[str]],
+    source_html: Path,
+    principal_category_items: Sequence[Dict[str, object]],
+    rendered_files: int,
+    rendered_dirs: int,
+    taxonomy_reference: Optional[TaxonomyReference] = None,
+) -> Dict[str, object]:
+    top_level_categories = sorted(
+        {
+            item["name"]
+            for item in principal_category_items
+            if isinstance(item, dict) and item.get("name")
+        },
+        key=str.lower,
+    )
+    return {
+        "container_root": str(target_root),
+        "source_html": str(source_html),
+        "archive_profile": "categories-only",
+        "bookmark_entries_in_html": entries_count,
+        "unique_urls_in_html": unique_count,
+        "active_urls": len(active),
+        "category_nodes": max(len(folder_all_urls) - 1, 0),
+        "new_urls": len(changes["new"]),
+        "changed_urls": len(changes["changed"]),
+        "removed_urls": len(changes["removed"]),
+        "reactivated_urls": len(changes["reactivated"]),
+        "excluded_noise_urls": len(excluded_records),
+        "sample_limit": 20,
+        "new_url_sample": changes["new"][:20],
+        "changed_url_sample": changes["changed"][:20],
+        "removed_url_sample": changes["removed"][:20],
+        "rendered_files": rendered_files,
+        "rendered_dirs": rendered_dirs,
+        "state_root": str(state_root),
+        "logical_root": taxonomy_reference.root_label if taxonomy_reference is not None else "ROOT",
+        "top_level_categories": top_level_categories,
+        "principal_categories": list(principal_category_items),
+        "root_index_path": str(target_root / INDEX_FILE),
+        "latest_summary_path": str(state_root / LATEST_SUMMARY_FILE),
+        "state_path": str(state_root / STATE_FILE),
+        "taxonomy_reference_md": str(taxonomy_reference.source_path) if taxonomy_reference is not None else "",
+    }
+
+
+def render_state_index(summary: Dict[str, object]) -> str:
+    archive_profile = str(summary.get("archive_profile", "full"))
+    lines = [
+        "# 状态目录",
+        "",
+        f"- {t('label_archive_profile')}: `{archive_profile}`",
+        f"- {t('label_source_html')}: `{summary.get('source_html', '')}`",
+        f"- {t('label_state_root')}: `{summary.get('state_root', '')}`",
+    ]
+    if summary.get("taxonomy_reference_md"):
+        lines.append(f"- {t('label_taxonomy_reference')}: `{summary.get('taxonomy_reference_md', '')}`")
+    if summary.get("latest_summary_path"):
+        lines.append(f"- latest_summary.json: `{summary.get('latest_summary_path', '')}`")
+    if summary.get("state_path"):
+        lines.append(f"- state.json: `{summary.get('state_path', '')}`")
+    lines.extend(
+        [
+            "",
+            "## 本次更新摘要",
+            "",
+            f"- {t('label_total_bookmarks')}: {summary.get('bookmark_entries_in_html', 0)}",
+            f"- {t('label_total_unique')}: {summary.get('unique_urls_in_html', 0)}",
+            f"- {t('label_active')}: {summary.get('active_urls', 0)}",
+            f"- {t('label_new')}: {summary.get('new_urls', 0)}",
+            f"- {t('label_changed')}: {summary.get('changed_urls', 0)}",
+            f"- {t('label_removed')}: {summary.get('removed_urls', 0)}",
+            f"- {t('label_excluded')}: {summary.get('excluded_noise_urls', 0)}",
+            "",
+        ]
+    )
+    top_level_categories = summary.get("top_level_categories", [])
+    if isinstance(top_level_categories, list) and top_level_categories:
+        lines.extend(
+            [
+                f"## {t('label_top_level_categories')}",
+                "",
+            ]
+        )
+        for name in top_level_categories:
+            lines.append(f"- {name}")
+        lines.append("")
+    sample_sections = [
+        (t("label_new"), summary.get("new_url_sample", [])),
+        (t("label_changed"), summary.get("changed_url_sample", [])),
+        (t("label_removed"), summary.get("removed_url_sample", [])),
+    ]
+    for title, sample in sample_sections:
+        if isinstance(sample, list) and sample:
+            lines.extend([f"## {title} 样例", ""])
+            for url in sample:
+                lines.append(f"- `{url}`")
+            lines.append("")
+    lines.extend(
+        [
+            "## 文件说明",
+            "",
+            "- `state.json`: 完整同步状态，用于后续 merge/create 去重和保留历史。",
+            "- `latest-summary.json`: 最近一次运行的机器摘要。",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_archive_categories_only(
+    target_root: Path,
+    state_root: Path,
+    raw_entries: Sequence[BookmarkEntry],
+    current_records: Dict[str, Dict[str, object]],
+    excluded_records: Dict[str, Dict[str, object]],
+    state: Dict[str, object],
+    changes: Dict[str, List[str]],
+    source_html: Path,
+    taxonomy_reference: Optional[TaxonomyReference],
+    previous_top_level_categories: Optional[Set[str]] = None,
+) -> Dict[str, object]:
+    logical_root = taxonomy_reference.root_label if taxonomy_reference is not None else "ROOT"
+    active = active_records(state)
+    render_records = records_without_logical_root(active, logical_root)
+    folder_children, folder_direct_links, folder_all_urls = build_category_tree(render_records)
+    category_paths = build_direct_category_fs_map(folder_children)
+    principal_category_items = principal_categories(tuple(), folder_children, folder_all_urls)
+
+    with tempfile.TemporaryDirectory(prefix="bookmark-sync-categories-") as temp_dir:
+        stage_root = Path(temp_dir) / target_root.name
+        state_extras_stash = Path(temp_dir) / "state-extras"
+        stage_root.mkdir(parents=True, exist_ok=True)
+
+        root_index_path = stage_root / INDEX_FILE
+        root_index_path.write_text(
+            render_direct_category_index(
+                tuple(),
+                folder_children,
+                folder_direct_links,
+                folder_all_urls,
+                category_paths,
+                logical_root,
+            ),
+            encoding="utf-8",
+        )
+        for category_key, rel_dir in category_paths.items():
+            if not category_key:
+                continue
+            output_path = stage_root / rel_dir / INDEX_FILE
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                render_direct_category_index(
+                    category_key,
+                    folder_children,
+                    folder_direct_links,
+                    folder_all_urls,
+                    category_paths,
+                    logical_root,
+                ),
+                encoding="utf-8",
+            )
+
+        rendered_files = sum(1 for path in stage_root.rglob("*") if path.is_file())
+        rendered_dirs = sum(1 for path in stage_root.rglob("*") if path.is_dir())
+        summary = build_categories_only_summary(
+            entries_count=len(raw_entries),
+            unique_count=len(current_records),
+            target_root=target_root,
+            state_root=state_root,
+            changes=changes,
+            active=active,
+            excluded_records=excluded_records,
+            folder_all_urls=folder_all_urls,
+            source_html=source_html,
+            principal_category_items=principal_category_items,
+            rendered_files=rendered_files,
+            rendered_dirs=rendered_dirs,
+            taxonomy_reference=taxonomy_reference,
+        )
+
+        if is_within(state_root, target_root):
+            stash_state_root_extras(state_root, state_extras_stash)
+        cleanup_known_conflict_copies(target_root)
+        replace_target(
+            target_root,
+            stage_root,
+            archive_profile="categories-only",
+            previous_top_level_categories=previous_top_level_categories,
+            preserve_entry_names={state_root.name} if is_within(state_root, target_root) else None,
+        )
+        cleanup_known_conflict_copies(target_root)
+        restore_state_root_extras(state_root, state_extras_stash)
+
+    save_json(state_root / STATE_FILE, state)
+    save_json(state_root / LATEST_SUMMARY_FILE, summary)
+    (state_root / INDEX_FILE).write_text(render_state_index(summary), encoding="utf-8")
+    for obsolete_name in [PENDING_ANNOTATIONS_FILE, EXCLUDED_LINKS_JSON]:
+        obsolete_path = state_root / obsolete_name
+        if obsolete_path.exists():
+            remove_path(obsolete_path)
+    obsolete_render_root = state_root / "rendered"
+    if obsolete_render_root.exists():
+        shutil.rmtree(obsolete_render_root)
+    ensure_archive_structure(target_root, state_root, archive_profile="categories-only")
+    return summary
 
 
 def render_archive(
@@ -1913,7 +3203,25 @@ def render_archive(
     pending_annotations: List[Dict[str, object]],
     source_html: Path,
     layout: str,
+    archive_profile: str = "full",
+    taxonomy_reference: Optional[TaxonomyReference] = None,
+    taxonomy_audit: Optional[Sequence[Dict[str, object]]] = None,
+    previous_top_level_categories: Optional[Set[str]] = None,
 ) -> Dict[str, object]:
+    if archive_profile == "categories-only":
+        return render_archive_categories_only(
+            target_root=target_root,
+            state_root=state_root,
+            raw_entries=raw_entries,
+            current_records=current_records,
+            excluded_records=excluded_records,
+            state=state,
+            changes=changes,
+            source_html=source_html,
+            taxonomy_reference=taxonomy_reference,
+            previous_top_level_categories=previous_top_level_categories,
+        )
+
     active = active_records(state)
     folder_children, folder_direct_links, folder_all_urls = build_category_tree(active)
     category_paths = build_category_fs_map(folder_children)
@@ -2068,6 +3376,11 @@ def render_archive(
             encoding="utf-8",
         )
         (reports_dir / EXCLUDED_LINKS_FILE).write_text(render_excluded_report(excluded_records), encoding="utf-8")
+        if taxonomy_reference is not None:
+            (reports_dir / RECLASSIFIED_LINKS_FILE).write_text(
+                render_reclassified_report(taxonomy_audit or []),
+                encoding="utf-8",
+            )
 
         dashboard_text = render_dashboard(
             entries_count=len(raw_entries),
@@ -2085,6 +3398,8 @@ def render_archive(
             layout=layout,
             summary_root=summary_root,
             principal_category_items=principal_category_items,
+            taxonomy_reference=taxonomy_reference,
+            taxonomy_audit=taxonomy_audit,
         )
         (stage_root / DASHBOARD_FILE).write_text(dashboard_text, encoding="utf-8")
 
@@ -2108,11 +3423,13 @@ def render_archive(
             principal_category_items=principal_category_items,
             rendered_files=rendered_files,
             rendered_dirs=rendered_dirs,
+            taxonomy_reference=taxonomy_reference,
+            taxonomy_audit=taxonomy_audit,
         )
         if is_within(state_root, target_root):
             stash_state_root_extras(state_root, state_extras_stash)
         cleanup_known_conflict_copies(target_root)
-        replace_target(target_root, stage_root)
+        replace_target(target_root, stage_root, archive_profile="full")
         cleanup_known_conflict_copies(target_root)
         restore_state_root_extras(state_root, state_extras_stash)
 
@@ -2120,11 +3437,12 @@ def render_archive(
     save_json(state_root / PENDING_ANNOTATIONS_FILE, pending_annotations)
     save_json(state_root / EXCLUDED_LINKS_JSON, excluded_records)
     save_json(state_root / LATEST_SUMMARY_FILE, summary)
+    (state_root / INDEX_FILE).write_text(render_state_index(summary), encoding="utf-8")
     cleanup_known_conflict_copies(target_root)
     obsolete_render_root = state_root / "rendered"
     if obsolete_render_root.exists():
         shutil.rmtree(obsolete_render_root)
-    ensure_archive_structure(target_root, state_root)
+    ensure_archive_structure(target_root, state_root, archive_profile="full")
 
     return summary
 
@@ -2137,11 +3455,18 @@ def main() -> None:
     target_root = Path(args.target_root).expanduser().resolve() / args.container_name
     if args.state_root:
         state_root = Path(args.state_root).expanduser().resolve()
+    elif args.archive_profile == "categories-only":
+        state_root = target_root / "_state"
     elif args.layout == "compact":
         state_root = default_external_state_root(target_root)
     else:
         state_root = target_root / ROOT_STATE
     annotations_file = Path(args.annotations_file).expanduser().resolve() if args.annotations_file else None
+    taxonomy_reference = (
+        parse_taxonomy_reference_markdown(Path(args.taxonomy_reference_md).expanduser().resolve())
+        if args.taxonomy_reference_md
+        else None
+    )
 
     if not source_html.exists():
         raise FileNotFoundError(f"input HTML not found: {source_html}")
@@ -2149,11 +3474,26 @@ def main() -> None:
     entries = parse_bookmark_html(source_html)
     clean_entries, excluded_entries = split_noise_entries(entries)
     current_records = aggregate_entries(clean_entries)
+    taxonomy_audit: List[Dict[str, object]] = []
+    if taxonomy_reference is not None:
+        current_records, taxonomy_audit = apply_reference_taxonomy(
+            current_records,
+            taxonomy_reference,
+            args.taxonomy_scope,
+            args.unmatched_policy,
+            args.display_category_source,
+        )
     excluded_records = aggregate_excluded_entries(excluded_entries)
 
     previous_state_path = state_root / STATE_FILE
     previous_state = load_state(previous_state_path) if args.mode == "merge" else {"version": STATE_VERSION, "records": {}}
-    annotations = load_annotations(annotations_file)
+    previous_top_level_categories = set()
+    if taxonomy_reference is not None:
+        previous_top_level_categories = top_level_categories_from_records(
+            active_records(previous_state),
+            taxonomy_reference.root_label,
+        )
+    annotations = load_annotations(annotations_file) if args.archive_profile == "full" else {}
     state, changes = merge_records(
         current_records,
         previous_state,
@@ -2162,7 +3502,13 @@ def main() -> None:
         args.mode,
         args.missing_policy,
     )
-    pending_annotations = build_pending_annotations(state["records"])
+    if taxonomy_reference is not None and taxonomy_reference.source_format == "ai_outline_v1":
+        state, taxonomy_audit = reclassify_state_records(
+            state,
+            taxonomy_reference,
+            args.display_category_source,
+        )
+    pending_annotations = build_pending_annotations(state["records"]) if args.archive_profile == "full" else []
     summary = render_archive(
         target_root=target_root,
         state_root=state_root,
@@ -2174,6 +3520,10 @@ def main() -> None:
         pending_annotations=pending_annotations,
         source_html=source_html,
         layout=args.layout,
+        archive_profile=args.archive_profile,
+        taxonomy_reference=taxonomy_reference,
+        taxonomy_audit=taxonomy_audit,
+        previous_top_level_categories=previous_top_level_categories,
     )
 
     if args.summary_path:

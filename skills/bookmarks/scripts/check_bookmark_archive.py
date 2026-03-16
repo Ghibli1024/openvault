@@ -24,6 +24,12 @@ def parse_args() -> argparse.Namespace:
         "--state-root",
         help="Optional state directory; defaults like sync_bookmark_html.py",
     )
+    parser.add_argument(
+        "--archive-profile",
+        choices=["full", "categories-only"],
+        default="full",
+        help="Archive profile to validate",
+    )
     return parser.parse_args()
 
 
@@ -34,7 +40,7 @@ def main() -> None:
         state_root = Path(args.state_root).expanduser().resolve()
     else:
         state_root = sync.default_external_state_root(target_root)
-    report = sync.archive_structure_report(target_root, state_root)
+    report = sync.archive_structure_report(target_root, state_root, archive_profile=args.archive_profile)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     if not report["ok"]:
         raise SystemExit(1)
