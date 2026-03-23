@@ -49,10 +49,37 @@ html-bookmarks-to-markdown/
 
 ## 运行要求
 
-- Python 3
+- Python 3.8+
 - 一份书签 HTML 导出文件
 
 不需要额外安装第三方 Python 包。
+
+## 安装
+
+这个仓库刻意保持为零依赖（只使用 Python 标准库）。克隆或下载后可以直接运行脚本：
+
+```bash
+python3 scripts/sync_bookmark_html.py --help
+```
+
+如果你习惯使用虚拟环境，也可以自己创建，但不是必需的。
+
+## 快速开始
+
+1. 从浏览器导出一份书签 HTML（Chrome、Edge、Firefox 一般都支持导出书签 HTML，通常是 Netscape 风格）。
+2. 先执行一次初始构建：
+
+```bash
+python3 scripts/sync_bookmark_html.py \
+  --input-html "/path/to/bookmarks.html" \
+  --target-root "/path/to/archive-root" \
+  --container-name "Bookmarks" \
+  --layout compact \
+  --mode create
+```
+
+3. 打开 `<target-root>/<container-name>/Dashboard.md` 作为浏览入口。
+4. 后续有新书签时，重新导出 HTML，并使用 `--mode merge`（默认值）做增量同步。
 
 ## 主要工作流
 
@@ -64,6 +91,13 @@ html-bookmarks-to-markdown/
 
 - `create`：只按当前 HTML 重建
 - `merge`：保留已有说明并增量同步
+
+实际使用时，下面两个参数最容易影响结果：
+
+- `--missing-policy keep|remove`（默认：`keep`）
+  在 `merge` 模式下，`keep` 会保留新 HTML 里缺失但旧归档里已有的链接；只有当你把 HTML 当成完整真相源时，才建议用 `remove`。
+- `--archive-profile full|categories-only`（默认：`full`）
+  `full` 会生成 dashboard、报告和分片索引；`categories-only` 只渲染分类目录，结构更轻。
 
 ### 2. 分批补注释
 
@@ -96,6 +130,8 @@ html-bookmarks-to-markdown/
 ```text
 <target-root>/<container-name>/
 ```
+
+说明：实际输出结构会受到 `--archive-profile` 和 `--layout` 影响。下面描述的是默认 `--archive-profile full` + `--layout compact` 的结果。
 
 ### 紧凑布局（compact）
 
@@ -153,6 +189,8 @@ python3 scripts/sync_bookmark_html.py \
   --title-language zh \
   --state-root "/path/to/archive-root/Bookmarks/_state"
 ```
+
+提示：大多数参数都可以通过 `--help` 查看，`--state-root` 是可选的；如果你设置了它，最好在后续运行里保持一致，因为它会保存增量同步状态（例如 `state.json`、summary、pending 注释等）。
 
 ### `scripts/autofill_annotations.py`
 
@@ -222,6 +260,10 @@ python3 scripts/check_bookmark_archive.py \
 
 - [references/annotations.example.json](references/annotations.example.json)
 
+## 隐私
+
+这套流程默认是本地优先的：脚本只读取你导出的 HTML，并把 Markdown / JSON 写到磁盘，不依赖网络、遥测或外部服务。
+
 ## 作为 Codex Skill 使用
 
 skill 定义在：
@@ -254,6 +296,21 @@ agent 注册配置在：
 这类东西，应该视为冲突副本，不是合法产物。
 
 所以这个仓库既提供了单独的健康检查命令，也在同步/导入流程里尽量把顶层保持在 canonical 结构。
+
+## 故障排查
+
+- 如果 merge 后出现意外删除，先检查是否用了 `--missing-policy remove`。当导出的 HTML 不完整时，默认的 `keep` 更安全。
+- 如果增量同步行为异常，确认你是否在重复使用同一个 `--state-root`；如果不想自己管，保留脚本默认目录并保持它不被删掉。
+- 如果归档放在 iCloud / Dropbox / OneDrive 之类同步盘中，建议在同步后执行结构检查，尽早发现冲突副本（比如 `Dashboard 2.md` 或 `01 Categories 2/`）。
+- 如果不确定问题出在哪，先回到最小参数组合（`--input-html` + `--target-root`）并配合 `--help` 重新验证环境。
+
+## 贡献
+
+欢迎提 issue 和 PR。如果要报告 bug，最有帮助的信息通常是：
+
+- 你运行的是哪个脚本，以及完整 CLI 参数
+- 归档 `_state/` 目录中的 `latest-summary.json` 等状态文件
+- 如果可以，提供一份最小化、脱敏后的 HTML 导出片段
 
 ## 常见用法
 
