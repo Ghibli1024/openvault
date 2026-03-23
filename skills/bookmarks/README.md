@@ -54,6 +54,33 @@ html-bookmarks-to-markdown/
 
 No external Python packages are required.
 
+## Installation
+
+This repository is intentionally zero-dependency (Python stdlib only). Clone or download it, then run the scripts directly:
+
+```bash
+python3 scripts/sync_bookmark_html.py --help
+```
+
+Optional: use a virtual environment if you prefer isolating Python tooling, but it is not required.
+
+## Quick Start
+
+1. Export bookmarks from your browser as an HTML file (Chrome/Edge/Firefox all support a bookmark HTML export; the format is typically Netscape-style).
+2. Run an initial build:
+
+```bash
+python3 scripts/sync_bookmark_html.py \
+  --input-html "/path/to/bookmarks.html" \
+  --target-root "/path/to/archive-root" \
+  --container-name "Bookmarks" \
+  --layout compact \
+  --mode create
+```
+
+3. Open the generated `Dashboard.md` under `<target-root>/<container-name>/` and browse from there.
+4. For later updates, re-export the HTML and use `--mode merge` (the default) to preserve existing descriptions/history.
+
 ## Main Workflows
 
 ### 1. Standard HTML sync
@@ -64,6 +91,13 @@ Supports:
 
 - `create`: rebuild from HTML only
 - `merge`: preserve existing descriptions/history and sync incrementally
+
+Two flags that matter in practice:
+
+- `--missing-policy keep|remove` (default: `keep`)
+  In `merge` mode, `keep` retains prior links that are missing from the new HTML export. Use `remove` only if you treat the HTML file as a complete snapshot and want deletions applied.
+- `--archive-profile full|categories-only` (default: `full`)
+  `full` generates the dashboard, reports, and shard indexes described below. `categories-only` renders only nested category folders (useful if you want the smallest possible footprint).
 
 ### 2. Gradual annotation
 
@@ -96,6 +130,8 @@ Archive root:
 ```text
 <target-root>/<container-name>/
 ```
+
+Note: the exact structure depends on `--archive-profile` and `--layout`. The sections below describe the default `--archive-profile full` + `--layout compact` output.
 
 ### Compact layout
 
@@ -141,6 +177,8 @@ excluded_links.json
 
 Primary sync entry point for standard HTML-to-Markdown conversion.
 
+Tip: most options are discoverable via `--help`, and `--state-root` is optional. If you do set it, keep it stable across runs because it stores incremental sync state (`state.json`, summaries, pending annotations, etc.).
+
 Example:
 
 ```bash
@@ -151,7 +189,8 @@ python3 scripts/sync_bookmark_html.py \
   --layout compact \
   --mode merge \
   --title-language zh \
-  --state-root "/path/to/archive-root/Bookmarks/_state"
+  --state-root "/path/to/archive-root/Bookmarks/_state" \
+  --missing-policy keep
 ```
 
 ### `scripts/autofill_annotations.py`
@@ -221,6 +260,10 @@ Recommended loop for large archives:
 Example annotation payload:
 
 - [references/annotations.example.json](references/annotations.example.json)
+
+## Privacy
+
+This is a local-first workflow: the scripts read your exported HTML and write Markdown/JSON files to disk. There is no network access, telemetry, or external service dependency in the default workflows.
 
 ## As a Codex Skill
 
@@ -300,6 +343,21 @@ python3 scripts/import_external_bookmark_html.py \
 - Compact layout is the recommended default for large collections.
 - Per-URL layout remains a legacy option for users who explicitly want one note per URL.
 - The external-import flow is safer than plain merge when duplicate URLs should remain untouched.
+
+## Troubleshooting
+
+- If you see unexpected deletions after a merge, check whether `--missing-policy remove` was used. The default `keep` is safer when your exported HTML is incomplete.
+- If incremental sync behaves oddly, verify that you are reusing the same `--state-root` across runs, or let the script pick its default and keep that directory intact.
+- If the archive lives in a sync folder (iCloud/Dropbox/OneDrive), run the structure check after syncs to catch conflict copies early (for example `Dashboard 2.md` or `01 Categories 2/`).
+- When in doubt, run the script with `--help` and reduce to the minimal flags (`--input-html`, `--target-root`) to confirm the environment is sound.
+
+## Contributing
+
+Issues and PRs are welcome. If you report a bug, it helps to include:
+
+- which script you ran and the exact CLI flags
+- the `latest-summary.json` (and other state files) from the archive `_state/` folder
+- a minimal sanitized HTML export snippet if possible
 
 ## License
 
