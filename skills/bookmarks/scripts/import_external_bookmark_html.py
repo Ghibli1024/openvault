@@ -24,10 +24,16 @@ import sync_bookmark_html as sync
 PathKey = Tuple[str, ...]
 Record = Dict[str, object]
 
-# Optional override hooks for installations that want a small number of
-# deterministic mappings before falling back to the generic import bucket.
-MANUAL_URL_PREFIX_OVERRIDES: List[Tuple[str, List[str]]] = []
-MANUAL_HOST_FAMILY_OVERRIDES: Dict[str, List[str]] = {}
+MANUAL_URL_PREFIX_OVERRIDES: List[Tuple[str, List[str]]] = [
+    (
+        "https://huggingface.co/papers",
+        ["书签工具栏", sync.LEGACY_RESOURCE_BOOKMARKS_ROOT, "文库学术", "学术搜索"],
+    ),
+]
+
+MANUAL_HOST_FAMILY_OVERRIDES: Dict[str, List[str]] = {
+    "ithome.com": ["书签工具栏", sync.LEGACY_RESOURCE_BOOKMARKS_ROOT, "新闻资讯", "it资讯"],
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--fallback-category",
-        default="Imported/Needs Review",
+        default=f"书签工具栏/{sync.LEGACY_RESOURCE_BOOKMARKS_ROOT}/资源探索",
         help="Slash-separated existing category path for URLs that cannot be mapped",
     )
     parser.add_argument("--summary-path", help="Optional path for copying the machine-readable summary JSON")

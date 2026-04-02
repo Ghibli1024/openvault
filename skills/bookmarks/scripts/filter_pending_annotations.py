@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--category-prefix",
         required=True,
-        help="Slash-separated category prefix, e.g. Research/AI Tools",
+        help="Slash-separated category prefix, e.g. 书签工具栏/资源书签/项目分支",
     )
     parser.add_argument("--limit", type=int, default=0, help="Optional maximum number of items to export")
     parser.add_argument("--output", required=True, help="Where to write the filtered JSON list")

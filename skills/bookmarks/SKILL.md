@@ -1,6 +1,6 @@
 ---
 name: html-bookmarks-to-markdown
-description: Convert bookmark-style HTML exports into a locally stored Markdown category tree driven by a user-owned taxonomy, prioritizing semantic classification from the local ROOT outline over the incoming HTML folder structure, with minimal state for future syncs and a legacy full-archive mode when needed.
+description: Convert bookmark-style HTML exports into a locally stored Markdown category tree driven by a user-owned taxonomy, prioritizing semantic classification from the chosen local taxonomy over the incoming HTML folder structure, with a built-in default taxonomy for new users and minimal state for future syncs.
 ---
 
 # HTML Bookmarks Markdown Sync
@@ -15,7 +15,13 @@ The default workflow is now `categories-only`:
 - keep minimal external state for future syncs,
 - optimize for Obsidian indexing and search stability instead of feature breadth.
 
-The preferred taxonomy source is the user's local `ROOT 网页归类母目录.md`.
+Taxonomy bootstrap rules:
+- the working taxonomy file is named `ROOT分类目录.md`
+- if the archive already has `ROOT分类目录.md`, use it by default on later runs
+- if the user starts from an empty folder, first generate a candidate `ROOT分类目录.md` from the HTML tree
+- then ask whether to keep that generated file or replace it with the built-in template
+- the built-in template lives at `references/default_root_taxonomy.md`
+- if the workflow must proceed non-interactively and no taxonomy file exists yet, fall back to the built-in template and write it into `ROOT分类目录.md`
 
 Important classification rule:
 - do **not** trust the incoming HTML folder structure as the primary classifier
@@ -29,7 +35,7 @@ Legacy `full` mode still exists for compatibility, but it is no longer the recom
 
 Assume these unless the user asks otherwise:
 - archive profile: `categories-only`
-- taxonomy source: required, prefer local `ROOT 网页归类母目录.md`
+- taxonomy source: auto-detected `ROOT分类目录.md` when available
 - taxonomy scope: `full`
 - unmatched policy: `nearest`
 - display category source: `reference`
@@ -39,6 +45,7 @@ Assume these unless the user asks otherwise:
 
 `categories-only` output:
 - `<target-root>/<container-name>/Index.md`
+- `<target-root>/<container-name>/ROOT分类目录.md`
 - `<target-root>/<container-name>/<一级主类>/.../Index.md`
 - `<target-root>/<container-name>/_state/` containing:
   - `state.json`
@@ -59,6 +66,8 @@ Assume these unless the user asks otherwise:
 - link rows use a compact format such as `- [标题](URL) · \`host\``
 - classification should prefer semantic matching against the local taxonomy tree
 - HTML source folders should only influence placement when they are highly consistent with the local taxonomy
+- root `Index.md` contains a `# 手动` section where the user can paste one URL per line
+- on the next sync run, those manual URLs are classified and merged into the library, then removed from the `# 手动` list
 
 Legacy `full` mode:
 - keeps the older reports, link shards, domain indexes, and dashboard
@@ -78,6 +87,10 @@ Collect or confirm:
 
 If the user points to an existing archive and wants `merge`, inspect it first and preserve its established taxonomy unless they explicitly ask for a rewrite.
 
+Every time this skill is used, tell the user which taxonomy source will be used:
+- if `ROOT分类目录.md` already exists, say it will be used by default
+- if it does not exist, say you will first create a candidate `ROOT分类目录.md` from the HTML and then let them choose between that candidate and the built-in template
+
 ## Required User Decision
 
 Before running, confirm:
@@ -91,13 +104,17 @@ Before running, confirm:
 - do not guess ambiguous paths
 
 The taxonomy reference should normally be one of:
-- preferred: an AI-outline taxonomy note such as `ROOT 网页归类母目录.md` with `FORMAT: AI_OUTLINE_V1`
+- an AI-outline taxonomy note such as `ROOT分类目录.md` with `FORMAT: AI_OUTLINE_V1`
 - fallback: a folder index note with `## 根目录` and `## 全路径检索索引`
 
 Reference priority rules:
-- if a local ROOT outline exists, treat it as the single source of truth
+- if the archive already has `ROOT分类目录.md`, treat it as the source of truth on later runs
 - if only a folder index exists, use that as a structural fallback
 - do not let the new HTML export override the user's established taxonomy
+- if no taxonomy file exists yet:
+  - first generate `ROOT分类目录.md` from the HTML categories
+  - ask the user whether to keep that generated file as the initial template or replace it with the built-in template
+  - if they choose the built-in template, write `references/default_root_taxonomy.md` into `ROOT分类目录.md`
 
 ## Output Contract
 
@@ -106,6 +123,7 @@ For the default `categories-only` profile, the generated archive lives at:
 
 Expected top level:
 - `Index.md`
+- `ROOT分类目录.md`
 - one directory per primary category from the taxonomy reference
 
 Expected external state root:
@@ -113,7 +131,7 @@ Expected external state root:
 - `latest-summary.json`
 
 `categories-only` mapping rules:
-- strip legacy roots such as `书签工具栏 / 无知资源书签 / 无知书签`
+- strip legacy roots such as `书签工具栏 / 资源书签 / 历史书签根`
 - treat `ROOT` as the logical root only, not a disk folder
 - prefer semantic classification against the local taxonomy tree
 - use title, domain, URL tokens, aliases, and node scope text as the main evidence
@@ -128,11 +146,14 @@ Example:
 ## Workflow
 
 1. Confirm the HTML path, archive location, and taxonomy reference Markdown.
-2. Parse the taxonomy reference from the local ROOT outline if available; otherwise use the folder-index fallback.
-3. Strip legacy bookmark roots and classify each bookmark semantically into the reference tree.
-4. Render only category directories with `Index.md` files.
-5. Write minimal external state.
-6. Validate with `check_bookmark_archive.py --archive-profile categories-only`.
+2. If `ROOT分类目录.md` already exists, use it as the default taxonomy.
+3. If it does not exist, first generate a candidate `ROOT分类目录.md` from the incoming HTML.
+4. Ask the user whether to keep the generated candidate or replace it with `references/default_root_taxonomy.md`.
+5. Strip legacy bookmark roots and classify each bookmark semantically into the chosen taxonomy.
+6. Read any URLs under the root `# 手动` section, classify them too, then clear that list.
+7. Render only category directories with `Index.md` files.
+8. Write minimal external state.
+9. Validate with `check_bookmark_archive.py --archive-profile categories-only`.
 
 Health-check command:
 ```bash
@@ -186,8 +207,8 @@ Use the batch filter helper:
 ```bash
 python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/filter_pending_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
-  --category-prefix "书签工具栏/无知资源书签/无知网站" \
-  --output "/path/to/batches/wuzhi.json"
+  --category-prefix "书签工具栏/资源书签/项目分支" \
+  --output "/path/to/batches/project-branch.json"
 ```
 
 Then fill `description`, optional `note`, and optional `tags` in that batch file and re-run the main sync with `--annotations-file`.
