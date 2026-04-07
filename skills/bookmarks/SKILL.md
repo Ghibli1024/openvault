@@ -157,7 +157,7 @@ Example:
 
 Health-check command:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_bookmark_archive.py \
+python3 scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
   --state-root "/path/to/state-root" \
@@ -166,7 +166,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_boo
 
 Legacy full-mode command:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -205,7 +205,7 @@ Recommended strategy:
 
 Use the batch filter helper:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/filter_pending_annotations.py \
+python3 scripts/filter_pending_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
   --category-prefix "书签工具栏/资源书签/项目分支" \
   --output "/path/to/batches/project-branch.json"
@@ -218,7 +218,7 @@ Then fill `description`, optional `note`, and optional `tags` in that batch file
 When the user explicitly wants everything filled without waiting for review, use the autofill helper to generate first-pass descriptions for every remaining pending URL:
 
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/autofill_annotations.py \
+python3 scripts/autofill_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
   --output "/path/to/batches/autofill-all.json"
 ```
@@ -226,7 +226,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/autofill_
 Then sync it back:
 
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -276,7 +276,7 @@ Filtered links should:
 
 First sync or later incremental sync:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -287,7 +287,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_book
 
 Single-folder compact example:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -299,7 +299,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_book
 
 External HTML import into existing `Bookmarks`:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/import_external_bookmark_html.py \
+python3 scripts/import_external_bookmark_html.py \
   --input-html "/path/to/external-bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -309,7 +309,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/import_ex
 
 Post-run structure check:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_bookmark_archive.py \
+python3 scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
   --state-root "/path/to/archive-root/Bookmarks/_state"
@@ -317,7 +317,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/check_boo
 
 Relative-path example:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "./exports/bookmarks.html" \
   --target-root "./notes" \
   --container-name "网页聚合" \
@@ -328,7 +328,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_book
 
 Import descriptions for pending URLs and re-render:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -340,7 +340,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_book
 
 Full rebuild from the latest HTML only:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -351,7 +351,7 @@ python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_book
 
 Legacy per-URL layout:
 ```bash
-python3 /Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts/sync_bookmark_html.py \
+python3 scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \

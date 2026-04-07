@@ -1,14 +1,20 @@
+import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 
-try:
-    from scripts.search_x_likes import load_records, match_records, write_search_note
-except ModuleNotFoundError:
-    load_records = None
-    match_records = None
-    write_search_note = None
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "search_x_likes.py"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("search_x_likes_runtime", SCRIPT_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["search_x_likes_runtime"] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_note(path: Path, *, tweet_id: str, title: str, author: str, domain: str, content: str) -> None:
@@ -37,9 +43,10 @@ def _write_note(path: Path, *, tweet_id: str, title: str, author: str, domain: s
 
 class SearchXLikesTests(unittest.TestCase):
     def test_search_results_are_written_into_04_search(self):
-        self.assertIsNotNone(load_records, "load_records should be importable")
-        self.assertIsNotNone(match_records, "match_records should be importable")
-        self.assertIsNotNone(write_search_note, "write_search_note should be importable")
+        module = load_module()
+        load_records = module.load_records
+        match_records = module.match_records
+        write_search_note = module.write_search_note
 
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "X Likes"

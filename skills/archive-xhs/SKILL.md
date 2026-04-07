@@ -9,9 +9,9 @@ Use this wrapper when the user wants to import `小红书` 收藏/喜欢 into Ob
 
 ## Handoff Target
 
-The canonical execution workflow remains:
+The canonical execution workflow now lives in this repository at:
 
-- `/Users/Totoro/.codex/skills/xhs-favorites-to-obsidian/SKILL.md`
+- `../xhs/SKILL.md`
 
 Open that skill and follow its current intake, execution, and validation rules.
 

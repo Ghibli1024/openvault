@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = SCRIPT_DIR.parent.parent
-BASE_SYNC_PATH = SKILLS_DIR / "x-to-obsidian" / "scripts" / "sync_x_likes.py"
+BASE_SYNC_PATH = SKILLS_DIR / "x-likes" / "scripts" / "sync_x_likes.py"
 
 ROOT_DATE = "01 日期"
 ROOT_AUTHOR = "02 作者"

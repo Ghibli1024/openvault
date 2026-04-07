@@ -9,9 +9,9 @@ Use this wrapper when the user wants to import a bookmark-style HTML export into
 
 ## Handoff Target
 
-The canonical execution workflow remains:
+The canonical execution workflow now lives in this repository at:
 
-- `/Users/Totoro/.codex/skills/html-bookmarks-to-markdown/SKILL.md`
+- `../bookmarks/SKILL.md`
 
 Open that skill and follow its current intake, execution, and validation rules.
 

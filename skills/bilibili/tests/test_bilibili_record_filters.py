@@ -4,9 +4,8 @@ import unittest
 from pathlib import Path
 
 
-FILTERS_PATH = Path(
-    "/Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/scripts/bilibili_record_filters.py"
-)
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+FILTERS_PATH = SKILL_ROOT / "scripts" / "bilibili_record_filters.py"
 
 
 def load_module(path: Path, name: str):

@@ -171,7 +171,7 @@ If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类
 
 Auto:
 ```bash
-python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
+python3 scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode merge \
@@ -182,7 +182,7 @@ python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
 
 Manual with explicit rules:
 ```bash
-python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
+python3 scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode create \
@@ -193,7 +193,7 @@ python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
 
 Manual with local taxonomy fallback:
 ```bash
-python3 /Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py \
+python3 scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode merge \

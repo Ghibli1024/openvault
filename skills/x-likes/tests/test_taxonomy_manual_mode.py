@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest import mock
 
 
-SYNC_PATH = Path("/Users/Totoro/.codex/skills/x-to-obsidian/scripts/sync_x_likes.py")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+SYNC_PATH = SKILL_ROOT / "scripts" / "sync_x_likes.py"
 
 
 def load_module(path: Path, name: str):

@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 
 
-EXPORT_PATH = Path("/Users/Totoro/.codex/skills/xhs-favorites-to-obsidian/scripts/export_xhs_favorites.py")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+EXPORT_PATH = SKILL_ROOT / "scripts" / "export_xhs_favorites.py"
 
 
 def load_module(path: Path, name: str):

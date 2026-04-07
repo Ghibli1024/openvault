@@ -8,7 +8,8 @@ from pathlib import Path
 from unittest import mock
 
 
-SCRIPT_DIR = Path("/Users/Totoro/.codex/skills/html-bookmarks-to-markdown/scripts")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_DIR = SKILL_ROOT / "scripts"
 SYNC_PATH = SCRIPT_DIR / "sync_bookmark_html.py"
 RECLASSIFY_PATH = SCRIPT_DIR / "reclassify_existing_archive.py"
 
@@ -357,7 +358,7 @@ PRIMARY_GOAL: 公开模板
         self.assertIn("现有分类", taxonomy_path.read_text(encoding="utf-8"))
 
     def test_public_default_template_has_no_private_source_branches(self):
-        default_path = Path("/Users/Totoro/.codex/skills/html-bookmarks-to-markdown/references/default_root_taxonomy.md")
+        default_path = SKILL_ROOT / "references" / "default_root_taxonomy.md"
         text = default_path.read_text(encoding="utf-8")
         reference = self.sync.parse_taxonomy_reference_markdown(default_path)
         private_branch_a = concealed_text(20250, 21592, 19987, 20139)

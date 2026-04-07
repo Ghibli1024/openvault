@@ -108,13 +108,13 @@ v1 固定保留三种浏览方式：
 7. 运行抓取 helper：
 
 ```bash
-node /Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/scripts/fetch_bilibili_favorites.mjs
+node scripts/fetch_bilibili_favorites.mjs
 ```
 
 8. 运行同步脚本：
 
 ```bash
-python3 /Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/scripts/sync_bilibili_favorites.py \
+python3 scripts/sync_bilibili_favorites.py \
   --target-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources" \
   --mode merge \
   --classification auto \
@@ -146,7 +146,7 @@ python3 /Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/scripts/sync_
 生成完成后，可以用搜索脚本把查询结果写入 `06 搜索/`：
 
 ```bash
-python3 /Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/scripts/search_bilibili_favorites.py \
+python3 scripts/search_bilibili_favorites.py \
   --archive-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/B站" \
   --query "AI 教程"
 ```

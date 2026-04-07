@@ -63,7 +63,7 @@ If the user provides a path ending in `/小红书`, treat it as the intended fin
 7. Run export:
 
 ```bash
-python3 /Users/Totoro/.codex/skills/xhs-favorites-to-obsidian/scripts/export_xhs_favorites.py \
+python3 scripts/export_xhs_favorites.py \
   --favorites-html "/path/to/收藏.html" \
   --liked-html "/path/to/喜欢.html" \
   --output-json "$CODEX_HOME/state/xhs-favorites/latest-export.json"
@@ -72,7 +72,7 @@ python3 /Users/Totoro/.codex/skills/xhs-favorites-to-obsidian/scripts/export_xhs
 8. Run sync:
 
 ```bash
-python3 /Users/Totoro/.codex/skills/xhs-favorites-to-obsidian/scripts/sync_xhs_favorites.py \
+python3 scripts/sync_xhs_favorites.py \
   --input-json "$CODEX_HOME/state/xhs-favorites/latest-export.json" \
   --target-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources" \
   --mode merge \

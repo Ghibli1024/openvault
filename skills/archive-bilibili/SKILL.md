@@ -9,9 +9,9 @@ Use this wrapper when the user wants to import or refresh `B站` 收藏 into Obs
 
 ## Handoff Target
 
-The canonical execution workflow remains:
+The canonical execution workflow now lives in this repository at:
 
-- `/Users/Totoro/.codex/skills/bilibili-favorites-to-obsidian/SKILL.md`
+- `../bilibili/SKILL.md`
 
 Open that skill and follow its current intake, execution, and validation rules.
 

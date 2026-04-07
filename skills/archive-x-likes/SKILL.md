@@ -9,9 +9,9 @@ Use this wrapper when the user wants to import `X Likes` or `Twitter/X likes JSO
 
 ## Handoff Target
 
-The canonical execution workflow remains:
+The canonical execution workflow now lives in this repository at:
 
-- `/Users/Totoro/.codex/skills/x-to-obsidian/SKILL.md`
+- `../x-likes/SKILL.md`
 
 Open that skill and follow its current intake, execution, and validation rules.
 

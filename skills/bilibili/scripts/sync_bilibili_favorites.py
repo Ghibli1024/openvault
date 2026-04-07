@@ -292,7 +292,7 @@ def fallback_title(record_id: str) -> str:
 
 @lru_cache(maxsize=1)
 def load_taxonomy_module():
-    taxonomy_path = Path(__file__).resolve().parents[2] / "x-to-obsidian" / "scripts" / "taxonomy_reference.py"
+    taxonomy_path = Path(__file__).resolve().parents[2] / "x-likes" / "scripts" / "taxonomy_reference.py"
     spec = importlib.util.spec_from_file_location("bilibili_taxonomy_reference", taxonomy_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load taxonomy module from {taxonomy_path}")
