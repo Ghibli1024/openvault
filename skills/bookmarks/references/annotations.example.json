@@ -1,0 +1,35 @@
+[
+  {
+    "url": "https://openai.com/research",
+    "title": "OpenAI Research",
+    "host": "openai.com",
+    "category_paths": [
+      [
+        "AI"
+      ]
+    ],
+    "description": "OpenAI 的研究主页，用来查看最新研究项目、论文和技术进展。",
+    "note": "适合归档前沿模型与研究发布。",
+    "tags": [
+      "AI",
+      "research"
+    ]
+  },
+  {
+    "url": "https://github.com/features/actions",
+    "title": "GitHub Actions",
+    "host": "github.com",
+    "category_paths": [
+      [
+        "Dev"
+      ]
+    ],
+    "description": "GitHub Actions 的产品页，用来了解 CI/CD 自动化能力和典型工作流。",
+    "note": "如果后续 HTML 里新增同域名链接，可保留这个描述风格。",
+    "tags": [
+      "CI/CD",
+      "automation",
+      "GitHub"
+    ]
+  }
+]
