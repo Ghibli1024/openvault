@@ -1,0 +1,4 @@
+interface:
+  display_name: "归档小红书"
+  short_description: "把小红书收藏或喜欢导入现有 Obsidian 归档流程"
+  default_prompt: "Use $archive-xhs to import Xiaohongshu favorites or likes HTML exports into Obsidian."

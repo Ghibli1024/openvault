@@ -1,0 +1,4 @@
+interface:
+  display_name: "归档 B站"
+  short_description: "把 B站收藏导入现有 Obsidian 归档流程"
+  default_prompt: "Use $archive-bilibili to export Bilibili favorites into the existing Obsidian archive workflow."

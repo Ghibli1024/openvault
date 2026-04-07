@@ -1,0 +1,37 @@
+{
+  "name": "openvault",
+  "version": "0.1.0",
+  "description": "Visible local plugin that routes bookmark and social favorites imports into the right Obsidian archive workflow under the openvault brand.",
+  "author": {
+    "name": "Totoro",
+    "email": "",
+    "url": ""
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "obsidian",
+    "archive",
+    "bookmarks",
+    "xiaohongshu",
+    "bilibili",
+    "x-likes"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "openvault",
+    "shortDescription": "统一入口：书签库、小红书、B站、X Likes",
+    "longDescription": "一个可见的本地插件，用 1 个总入口和 4 个专用入口复用现有资源归档 workflows，并统一到 openvault 品牌。",
+    "developerName": "Totoro",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use $archive-router to route a bookmarks HTML, Xiaohongshu export, Bilibili favorites, or X likes JSON import.",
+      "Use $archive-bilibili to export my Bilibili favorites into Obsidian.",
+      "Use $archive-bookmarks to import a bookmarks HTML archive into Obsidian."
+    ],
+    "brandColor": "#2F7A5D"
+  }
+}

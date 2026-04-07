@@ -1,0 +1,4 @@
+interface:
+  display_name: "归档 X Likes"
+  short_description: "把 X likes JSON 导入现有 Obsidian 归档流程"
+  default_prompt: "Use $archive-x-likes to import an X likes JSON export into the existing Obsidian archive workflow."
