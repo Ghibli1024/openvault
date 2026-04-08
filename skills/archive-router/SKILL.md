@@ -1,6 +1,6 @@
 ---
 name: archive-router
-description: Route Obsidian archive requests to the right source-specific workflow when the user wants to import bookmark HTML, Xiaohongshu favorites HTML, Bilibili favorites, or X likes JSON without remembering which skill to call.
+description: Route Obsidian archive requests to the right canonical workflow when the user wants to import bookmark HTML, Xiaohongshu favorites HTML, Bilibili favorites, or X likes JSON without remembering which skill to call.
 ---
 
 # Archive Router
@@ -18,18 +18,18 @@ python3 /Users/Totoro/plugins/openvault/scripts/detect_source.py \
   --path "/absolute/or/pasted/path"
 ```
 
-- If the helper returns a unique source, continue with the matching wrapper skill immediately.
+- If the helper returns a unique source, continue with the matching canonical skill immediately.
 - If the helper returns `ambiguous`, ask exactly one targeted clarifying question and wait.
-- Do not re-specify the full import workflow once routed. Load the matching wrapper skill and let it hand off to the canonical source skill.
+- Do not re-specify the full import workflow once routed. Load the matching canonical skill directly.
 - If the user asks to search without naming a specific source, search across the whole resources root and include the global `废弃/` folder.
 - If the user asks to clean up `废弃`, treat the global `废弃/` folder as the only manual deletion queue. Do not recreate per-source `搜索/废弃` roots.
 
 ## Source Map
 
-- `bookmarks` -> `$archive-bookmarks`
-- `xhs` -> `$archive-xhs`
-- `bilibili` -> `$archive-bilibili`
-- `x-likes` -> `$archive-x-likes`
+- `bookmarks` -> `$html-bookmarks-to-markdown`
+- `xhs` -> `$xhs-favorites-to-obsidian`
+- `bilibili` -> `$bilibili-favorites-to-obsidian`
+- `x-likes` -> `$x-to-obsidian`
 
 ## Shared References
 
