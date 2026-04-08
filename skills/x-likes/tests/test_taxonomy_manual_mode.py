@@ -238,7 +238,8 @@ PRIMARY_GOAL: taxonomy test
         )
 
     def test_replace_target_recreates_rubbish_root_with_hidden_placeholder(self):
-        output_root = self.temp_dir / "X Likes"
+        resources_root = self.temp_dir / "04-Resources"
+        output_root = resources_root / "X"
         stage_root = self.temp_dir / "stage"
         (stage_root / "01 Date").mkdir(parents=True, exist_ok=True)
         (stage_root / "02 Author").mkdir(parents=True, exist_ok=True)
@@ -247,8 +248,8 @@ PRIMARY_GOAL: taxonomy test
 
         self.sync.replace_target(output_root, stage_root)
 
-        self.assertTrue((output_root / "05 Rubbish").exists())
-        self.assertTrue((output_root / "05 Rubbish" / ".keep").exists())
+        self.assertTrue((resources_root / "废弃").exists())
+        self.assertTrue((resources_root / "搜索").exists())
 
 
 if __name__ == "__main__":

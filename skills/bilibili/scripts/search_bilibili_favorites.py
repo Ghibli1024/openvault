@@ -120,7 +120,7 @@ def unique_output_path(search_root: Path, base_name: str) -> Path:
 
 
 def write_search_note(archive_root: Path, query: str, matched: List[SearchRecord], note_title: str | None = None) -> Path:
-    search_root = archive_root / SEARCH_DIRNAME
+    search_root = archive_root.parent / "搜索"
     search_root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     title = note_title or f"{datetime.now().strftime('%Y-%m-%d')} - {query}"
@@ -157,7 +157,7 @@ def write_search_note(archive_root: Path, query: str, matched: List[SearchRecord
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Search existing Bilibili favorite notes and write results into 06 搜索.")
+    parser = argparse.ArgumentParser(description="Search existing Bilibili favorite notes and write results into the global 搜索 root.")
     parser.add_argument("--archive-root", required=True, help="Path to B站收藏 root")
     parser.add_argument("--query", required=True, help="Search terms")
     parser.add_argument("--limit", type=int, default=50, help="Maximum number of results to write")

@@ -19,8 +19,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "openvault",
-    "shortDescription": "统一入口：书签库、小红书、B站、X Likes",
-    "longDescription": "一个可见的本地插件，用 1 个总入口和 4 个专用入口复用现有资源归档 workflows，并统一到 openvault 品牌。",
+    "shortDescription": "统一入口：书签、小红书、B站、X",
+    "longDescription": "一个可见的本地插件，只保留 1 个总入口来统一导入、同步、全局搜索和废弃清理，并把来源内搜索/废弃提升到资源根统一管理。",
     "developerName": "Totoro",
     "category": "Productivity",
     "capabilities": [
@@ -28,9 +28,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Use $archive-router to route a bookmarks HTML, Xiaohongshu export, Bilibili favorites, or X likes JSON import.",
-      "Use $archive-bilibili to export my Bilibili favorites into Obsidian.",
-      "Use $archive-bookmarks to import a bookmarks HTML archive into Obsidian."
+      "Use $archive-router as the single visible openvault entry for import, sync, search, and rubbish cleanup workflows."
     ],
     "brandColor": "#2F7A5D"
   }

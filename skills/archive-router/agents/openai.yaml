@@ -1,4 +1,4 @@
 interface:
-  display_name: "归档路由"
-  short_description: "把书签库、小红书、B站、X Likes 导到正确归档流程"
-  default_prompt: "Use $archive-router to route a bookmarks HTML, Xiaohongshu export, Bilibili favorites request, or X likes JSON import."
+  display_name: "openvault"
+  short_description: "单入口处理导入、同步、全局搜索和废弃清理"
+  default_prompt: "Use $archive-router as the single visible openvault entry for import, sync, global search, and rubbish cleanup across 书签、小红书、B站、X."

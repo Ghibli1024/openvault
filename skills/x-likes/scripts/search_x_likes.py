@@ -104,7 +104,7 @@ def unique_output_path(search_root: Path, base_name: str) -> Path:
 
 
 def write_search_note(xlikes_root: Path, query: str, matched: list[SearchRecord], note_title: str | None = None) -> Path:
-    search_root = xlikes_root / "04 Search"
+    search_root = xlikes_root.parent / "搜索"
     search_root.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     title = note_title or f"{datetime.now().strftime('%Y-%m-%d')} - {query}"
@@ -140,7 +140,7 @@ def write_search_note(xlikes_root: Path, query: str, matched: list[SearchRecord]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Search existing X Likes notes and write results into 04 Search.")
+    parser = argparse.ArgumentParser(description="Search existing X notes and write results into the global 搜索 root.")
     parser.add_argument("--xlikes-root", required=True, help="Path to X Likes root")
     parser.add_argument("--query", required=True, help="Search terms")
     parser.add_argument("--limit", type=int, default=50, help="Maximum number of results to write")

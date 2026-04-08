@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 import unicodedata
 from collections import Counter, defaultdict
@@ -33,6 +34,13 @@ from typing import DefaultDict, Dict, Iterable, List, Optional, Sequence, Set, T
 from urllib import error as urlerror
 from urllib import request as urlrequest
 from urllib.parse import urlparse, urlunparse
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_SCRIPTS_DIR = SCRIPT_DIR.parents[2] / "scripts"
+if str(ROOT_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_SCRIPTS_DIR))
+
+import vault_runtime
 
 
 STATE_VERSION = 1
@@ -391,7 +399,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--container-name",
-        default="HTML Bookmarks",
+        default="书签",
         help="Folder name created under target root",
     )
     parser.add_argument(
@@ -3932,7 +3940,10 @@ def main() -> None:
     set_active_language(args.title_language)
 
     source_html = Path(args.input_html).expanduser().resolve()
-    target_root = Path(args.target_root).expanduser().resolve() / args.container_name
+    resources_root = Path(args.target_root).expanduser().resolve()
+    vault_runtime.migrate_resources_layout(resources_root)
+    vault_runtime.ensure_global_roots(resources_root)
+    target_root = resources_root / args.container_name
     if args.state_root:
         state_root = Path(args.state_root).expanduser().resolve()
     elif args.archive_profile == "categories-only":
@@ -3981,6 +3992,16 @@ def main() -> None:
         entries.extend(build_manual_entries(manual_urls, active_records(previous_state)))
     clean_entries, excluded_entries = split_noise_entries(entries)
     current_records = aggregate_entries(clean_entries)
+    blocked_urls = {
+        normalize_url(url)
+        for url in vault_runtime.collect_global_rubbish_signals(resources_root)["书签"]["urls"]
+    }
+    if blocked_urls:
+        current_records = {
+            url: record
+            for url, record in current_records.items()
+            if normalize_url(url) not in blocked_urls
+        }
     taxonomy_audit: List[Dict[str, object]] = []
     if taxonomy_reference is not None:
         current_records, taxonomy_audit = apply_reference_taxonomy(
@@ -4007,6 +4028,14 @@ def main() -> None:
         args.mode,
         args.missing_policy,
     )
+    if blocked_urls:
+        for url, record in state.get("records", {}).items():
+            if not isinstance(record, dict):
+                continue
+            if normalize_url(url) not in blocked_urls:
+                continue
+            record["status"] = "removed"
+            record["removed_at"] = now_iso()
     if taxonomy_reference is not None and taxonomy_reference.source_format == "ai_outline_v1":
         state, taxonomy_audit = reclassify_state_records(
             state,

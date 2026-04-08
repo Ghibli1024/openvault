@@ -32,8 +32,12 @@ from urllib.parse import urlparse
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+ROOT_SCRIPTS_DIR = SCRIPT_DIR.parents[2] / "scripts"
+if str(ROOT_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_SCRIPTS_DIR))
 
 import taxonomy_reference as taxonomy
+import vault_runtime
 
 
 MAX_DOMAIN_FILE_SIZE = 100
@@ -162,8 +166,8 @@ class Record:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync X likes JSON to local Markdown structure.")
     parser.add_argument("--input-json", required=True, help="Path to exported X likes JSON")
-    parser.add_argument("--target-root", required=True, help="Root path XX. Output is XX/X Likes/")
-    parser.add_argument("--container-name", default="X Likes", help="Container folder inside target root")
+    parser.add_argument("--target-root", required=True, help="Root path XX. Output is XX/X/")
+    parser.add_argument("--container-name", default="X", help="Container folder inside target root")
     parser.add_argument("--mode", choices=["merge", "create"], required=True)
     parser.add_argument("--classification", choices=["auto", "manual"], required=True)
     parser.add_argument(
@@ -175,6 +179,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--manual-rules",
         help="Path to manual classification rules JSON (required when --classification manual)",
+    )
+    parser.add_argument(
+        "--missing-upstream-policy",
+        choices=["drop", "trash"],
+        default="drop",
+        help="How to handle local notes that disappear from the upstream snapshot during merge",
     )
     return parser.parse_args()
 
@@ -201,7 +211,7 @@ def local_build_root_for_target(target_root: Path, container_name: str) -> Optio
     if not is_icloud_target_root(target_root):
         return None
     target_hash = hashlib.sha1(str(target_root.expanduser().resolve()).encode("utf-8")).hexdigest()[:16]
-    safe_container = sanitize_filename(container_name) or "X Likes"
+    safe_container = sanitize_filename(container_name) or "X"
     return managed_state_root() / target_hash / safe_container
 
 
@@ -376,33 +386,7 @@ def parse_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
 
 
 def collect_rubbish_tweet_ids(root_dir: Path) -> set[str]:
-    rubbish_root = root_dir / root_rubbish_name()
-    if not rubbish_root.exists():
-        return set()
-
-    ids: set[str] = set()
-    status_pat = re.compile(r'https?://(?:twitter\.com|x\.com)/[^)\s"\']+/status/(\d+)')
-    wikilink_pat = re.compile(r"\[\[([^\]|#]+)")
-    tweet_id_pat = re.compile(r'^tweet_id:\s*"?(\d+)"?$', re.M)
-
-    for md in rubbish_root.rglob("*.md"):
-        text = md.read_text(encoding="utf-8", errors="ignore")
-        for m in tweet_id_pat.finditer(text):
-            ids.add(m.group(1))
-        for m in status_pat.finditer(text):
-            ids.add(m.group(1))
-        for m in wikilink_pat.finditer(text):
-            target = m.group(1).strip()
-            if not target.startswith(root_date_name() + "/"):
-                continue
-            note = root_dir / f"{target}.md"
-            if not note.exists():
-                continue
-            note_text = note.read_text(encoding="utf-8", errors="ignore")
-            note_match = tweet_id_pat.search(note_text)
-            if note_match:
-                ids.add(note_match.group(1))
-    return ids
+    return set(vault_runtime.collect_global_rubbish_signals(root_dir)["X"]["ids"])
 
 
 def apply_rubbish_filter(records: Dict[str, Record], rubbish_ids: set[str]) -> None:
@@ -3096,6 +3080,8 @@ def render_structure(stage_root: Path, records: Dict[str, Record]) -> Dict[str, 
 
 
 def replace_target(root_dir: Path, stage_root: Path) -> None:
+    resources_root = root_dir.parent
+    vault_runtime.ensure_global_roots(resources_root)
     removable = {
         "10 By Date",
         "20 By Author",
@@ -3140,9 +3126,7 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
         shutil.move(str(stage_root / dashboard_name()), str(root_dir / dashboard_name()))
     finally:
         shutil.rmtree(backup_dir, ignore_errors=True)
-
-    (root_dir / root_search_name()).mkdir(parents=True, exist_ok=True)
-    ensure_rubbish_placeholder(root_dir)
+    vault_runtime.ensure_global_roots(resources_root)
 
 
 def strip_duplicate_suffix(name: str) -> str:
@@ -3320,13 +3304,6 @@ def validate_output(root_dir: Path, expected_notes: int) -> Tuple[int, int]:
         raise RuntimeError(
             f"date tree normalization failed; bad_years={bad_years[:10]} bad_months={bad_months[:10]}"
         )
-    if not (root_dir / root_search_name()).exists():
-        raise RuntimeError(f"missing required root: {root_search_name()}")
-    rubbish_root = root_dir / root_rubbish_name()
-    if not rubbish_root.exists():
-        raise RuntimeError(f"missing required root: {root_rubbish_name()}")
-    if not (rubbish_root / ".keep").exists():
-        raise RuntimeError(f"missing rubbish placeholder file: {rubbish_root / '.keep'}")
     return md_count, tweet_count
 
 
@@ -3336,6 +3313,7 @@ def main() -> None:
 
     input_json = Path(args.input_json).expanduser().resolve()
     target_root = Path(args.target_root).expanduser().resolve()
+    vault_runtime.migrate_resources_layout(target_root)
     output_root = target_root / args.container_name
 
     if not input_json.exists():
@@ -3364,7 +3342,7 @@ def main() -> None:
         merged = dict(existing)
         merged.update(incoming)
 
-    rubbish_ids = collect_rubbish_tweet_ids(output_root)
+    rubbish_ids = collect_rubbish_tweet_ids(target_root)
     apply_rubbish_filter(merged, rubbish_ids)
 
     # Always normalize domain names to merge semantically equivalent categories.
@@ -3381,6 +3359,11 @@ def main() -> None:
 
     # File management rules: split oversized leaves with deeper hierarchy.
     rebalance_domains(merged, max_size=MAX_DOMAIN_FILE_SIZE, max_depth=MAX_DOMAIN_DEPTH)
+
+    removed_existing_ids = set(existing.keys()) - set(merged.keys())
+    if args.mode == "merge" and args.missing_upstream_policy == "trash":
+        for date_root in existing_date_roots(output_root):
+            vault_runtime.trash_markdown_notes_by_frontmatter_field(date_root, field="tweet_id", ids=removed_existing_ids)
 
     local_build_root = local_build_root_for_target(target_root, args.container_name)
     if local_build_root is not None:
@@ -3406,7 +3389,6 @@ def main() -> None:
         cleanup_empty_duplicate_dirs(output_root / root_date_name())
         cleanup_empty_duplicate_dirs(output_root / root_domain_name())
         md_count, tweet_count = validate_output(output_root, len(merged))
-        clear_rubbish_folder(output_root)
     finally:
         if local_build_root is None:
             shutil.rmtree(stage_parent, ignore_errors=True)
@@ -3417,6 +3399,7 @@ def main() -> None:
         "mode": args.mode,
         "classification": args.classification,
         "title_language": args.title_language,
+        "missing_upstream_policy": args.missing_upstream_policy,
         "manual_rules_source": str(manual_rules_path) if manual_rules_path is not None else "",
         "existing_before": len(existing),
         "incoming": len(incoming),

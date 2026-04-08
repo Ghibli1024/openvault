@@ -1,4 +1,0 @@
-version: 1
-agent:
-  short_description: "Import Xiaohongshu 收藏/喜欢 HTML exports into a 小红书 Obsidian archive with taxonomy, 来源视图, and 粗分类"
-  default_prompt: "Use $xhs-favorites-to-obsidian to import Xiaohongshu 收藏/喜欢 HTML export files into an Obsidian-ready Markdown archive. Collect favorites-html, optional liked-html, target-root, mode, title-language, and final confirmation in a short one-question-at-a-time flow. Prefer local HTML export over browser crawling. Keep classification on auto, use the established ROOT分类目录.md taxonomy when available, run export_xhs_favorites.py with --favorites-html/--liked-html first, then sync_xhs_favorites.py, and summarize total notes, source counts, and output path. The default container name should be 小红书."

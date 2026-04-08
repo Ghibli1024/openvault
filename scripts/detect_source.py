@@ -74,6 +74,9 @@ def _score_x_likes(text: str, path_text: str) -> tuple[int, list[str]]:
     if "x likes" in text or "twitter likes" in text or "x 喜欢" in text or "twitter 喜欢" in text:
         score += 4
         reasons.append("text mentions X likes")
+    if " x " in f" {text} " or text.startswith("x ") or text.endswith(" x"):
+        score += 2
+        reasons.append("text mentions X")
     if "x likes" in path_text or "twitter likes" in path_text:
         score += 4
         reasons.append("path mentions X likes")

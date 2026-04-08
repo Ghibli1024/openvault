@@ -41,17 +41,17 @@ class SyncXLikesRubbishCleanupTests(unittest.TestCase):
     def test_collect_rubbish_tweet_ids_from_note_links_and_urls(self):
         sync = self._load_module()
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "X Likes"
-            note = root / "01 Date" / "2026" / "3 月" / "Hello.md"
+            root = Path(tmp) / "04-Resources"
+            note = root / "X" / "01 Date" / "2026" / "3 月" / "Hello.md"
             self._write_note(note, "123", "https://x.com/alice/status/123")
 
-            rubbish = root / "05 Rubbish" / "to-delete.md"
+            rubbish = root / "废弃" / "to-delete.md"
             rubbish.parent.mkdir(parents=True, exist_ok=True)
             rubbish.write_text(
                 "\n".join(
                     [
                         "# 待删",
-                        "- [[01 Date/2026/3 月/Hello|Hello]]",
+                        "- [[X/01 Date/2026/3 月/Hello|Hello]]",
                         "- https://x.com/bob/status/456",
                     ]
                 ),

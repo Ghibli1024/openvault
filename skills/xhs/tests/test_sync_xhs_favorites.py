@@ -173,9 +173,8 @@ PRIMARY_GOAL: taxonomy test
         self.assertTrue((output_root / "03 来源" / "喜欢.md").exists())
         self.assertTrue((output_root / "04 领域" / "ROOT分类目录.md").exists())
         self.assertTrue((output_root / "05 粗分类" / "Index.md").exists())
-        self.assertTrue((output_root / "06 搜索").exists())
-        self.assertTrue((output_root / "07 废弃").exists())
-        self.assertTrue((output_root / "07 废弃" / ".keep").exists())
+        self.assertTrue((output_root.parent / "搜索").exists())
+        self.assertTrue((output_root.parent / "废弃").exists())
         dashboard = (output_root / "Dashboard.md").read_text(encoding="utf-8")
         self.assertIn("来源统计", dashboard)
         self.assertIn("粗分类统计", dashboard)
@@ -195,7 +194,7 @@ PRIMARY_GOAL: taxonomy test
         self.assertIn('source/收藏', note_text)
         self.assertTrue(any(path.name != "Index.md" for path in (output_root / "05 粗分类").glob("*.md")))
 
-    def test_merge_moves_removed_notes_to_rubbish(self):
+    def test_merge_removes_missing_notes_without_local_rubbish_output(self):
         taxonomy = self.temp_dir / "ROOT分类目录.md"
         self.write_taxonomy(taxonomy)
         target_root = self.temp_dir / "vault"
@@ -296,16 +295,12 @@ PRIMARY_GOAL: taxonomy test
         output_root = Path(summary["output_root"])
         active_note = output_root / "01 日期" / "2026" / "4 月" / "OCR 文本提取工具.md"
         removed_note = output_root / "01 日期" / "2026" / "4 月" / "ComfyUI 生图指南.md"
-        rubbish_root = output_root / "07 废弃"
-
         self.assertTrue(active_note.exists())
         self.assertFalse(removed_note.exists())
-        rubbish_files = list(rubbish_root.rglob("*.md"))
-        self.assertEqual(len(rubbish_files), 1)
-        self.assertIn('note_id: "note-1"', rubbish_files[0].read_text(encoding="utf-8"))
-        self.assertFalse((rubbish_root / ".keep").exists())
+        self.assertFalse((output_root / "07 废弃").exists())
+        self.assertTrue((output_root.parent / "废弃").exists())
         self.assertEqual(summary["final_notes"], 1)
-        self.assertEqual(summary["rubbish_moved"], 1)
+        self.assertEqual(summary["rubbish_moved"], 0)
 
     def test_normalize_output_tree_repairs_duplicate_suffix_files(self):
         root = self.temp_dir / "小红书"
@@ -358,7 +353,7 @@ PRIMARY_GOAL: taxonomy test
         self.assertFalse(duplicate_domain_dir.exists())
         self.assertFalse((coarse_dir / "AI与前沿科技 2.md").exists())
         self.assertFalse((root / "Dashboard 2.md").exists())
-        self.assertTrue((rubbish_dir / ".keep").exists())
+        self.assertTrue((root.parent / "废弃").exists())
 
     def test_migrate_legacy_root_layout_renames_old_root_numbers(self):
         root = self.temp_dir / "小红书"
@@ -389,8 +384,8 @@ PRIMARY_GOAL: taxonomy test
         self.assertTrue((root / "02 作者" / "alice.md").exists())
         self.assertTrue((root / "03 来源" / "old-collection.md").exists())
         self.assertTrue((root / "04 领域" / "ROOT分类目录.md").exists())
-        self.assertTrue((root / "06 搜索" / "old-search.md").exists())
-        self.assertTrue((root / "07 废弃" / "old-rubbish.md").exists())
+        self.assertTrue((root.parent / "搜索" / "old-search.md").exists())
+        self.assertTrue((root.parent / "废弃" / "old-rubbish.md").exists())
 
 
 if __name__ == "__main__":

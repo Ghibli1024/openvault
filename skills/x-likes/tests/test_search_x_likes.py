@@ -49,7 +49,8 @@ class SearchXLikesTests(unittest.TestCase):
         write_search_note = module.write_search_note
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir) / "X Likes"
+            resources_root = Path(tmpdir) / "04-Resources"
+            root = resources_root / "X"
             _write_note(
                 root / "01 Date" / "2026" / "3 月" / "Telegram-CLI.md",
                 tweet_id="1",
@@ -73,7 +74,7 @@ class SearchXLikesTests(unittest.TestCase):
 
             self.assertEqual(len(matched), 1)
             self.assertTrue(output.exists())
-            self.assertIn("04 Search", output.as_posix())
+            self.assertEqual(output.parent.resolve(), (resources_root / "搜索").resolve())
             content = output.read_text(encoding="utf-8")
             self.assertIn("Telegram CLI 检索", content)
             self.assertIn("Telegram-CLI", content)

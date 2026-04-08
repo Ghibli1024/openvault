@@ -36,9 +36,21 @@ class DetectSourceTests(unittest.TestCase):
         self.assertEqual(result["source"], "bookmarks")
         self.assertFalse(result["ambiguous"])
 
+    def test_detects_bookmarks_from_short_cn_name(self):
+        module = load_module(self)
+        result = module.detect_source("同步书签到 openvault")
+        self.assertEqual(result["source"], "bookmarks")
+        self.assertFalse(result["ambiguous"])
+
     def test_detects_x_likes_from_json_filename(self):
         module = load_module(self)
         result = module.detect_source("", "/tmp/x-likes-export.json")
+        self.assertEqual(result["source"], "x-likes")
+        self.assertFalse(result["ambiguous"])
+
+    def test_detects_x_from_short_name(self):
+        module = load_module(self)
+        result = module.detect_source("同步 X 收藏")
         self.assertEqual(result["source"], "x-likes")
         self.assertFalse(result["ambiguous"])
 

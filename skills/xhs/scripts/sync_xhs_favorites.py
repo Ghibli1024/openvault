@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = SCRIPT_DIR.parent.parent
 BASE_SYNC_PATH = SKILLS_DIR / "x-likes" / "scripts" / "sync_x_likes.py"
+ROOT_SCRIPTS_DIR = SKILLS_DIR.parent / "scripts"
 
 ROOT_DATE = "01 日期"
 ROOT_AUTHOR = "02 作者"
@@ -47,10 +48,7 @@ LEGACY_ROOT_MAPPINGS = {
     "06 Rubbish": ROOT_RUBBISH,
 }
 DEFAULT_CONTAINER_NAME = "小红书"
-DEFAULT_TARGET_ROOT = Path(
-    "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources"
-)
-DEFAULT_TAXONOMY_PATH = DEFAULT_TARGET_ROOT / "书签库" / "ROOT分类目录.md"
+DEFAULT_TAXONOMY_PATH = Path.cwd() / "04-Resources" / "书签" / "ROOT分类目录.md"
 RUBBISH_KEEP_FILE = ".keep"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 COARSE_SPLIT_MAX_LINES = 50
@@ -73,6 +71,13 @@ def load_module(path: Path, name: str):
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+if str(ROOT_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_SCRIPTS_DIR))
+
+
+import vault_runtime
 
 
 base = load_module(BASE_SYNC_PATH, "x_to_obsidian_base_sync")
@@ -121,12 +126,18 @@ class CoarseBucketRule:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sync Xiaohongshu favorites JSON to local Markdown structure.")
     parser.add_argument("--input-json", required=True, help="Path to exported Xiaohongshu favorites JSON")
-    parser.add_argument("--target-root", default=str(DEFAULT_TARGET_ROOT), help="Root path XX. Output is XX/小红书/")
+    parser.add_argument("--target-root", required=True, help="Root path XX. Output is XX/小红书/")
     parser.add_argument("--container-name", default=DEFAULT_CONTAINER_NAME, help="Container folder inside target root")
     parser.add_argument("--mode", choices=["merge", "create"], default="merge")
     parser.add_argument("--classification", choices=["auto"], default="auto")
     parser.add_argument("--title-language", choices=["zh", "en"], default="zh")
     parser.add_argument("--taxonomy-path", help="Path to AI_OUTLINE_V1 markdown taxonomy")
+    parser.add_argument(
+        "--missing-upstream-policy",
+        choices=["drop", "trash"],
+        default="drop",
+        help="How to handle local notes that disappear from the upstream snapshot during merge",
+    )
     return parser.parse_args()
 
 
@@ -1251,11 +1262,17 @@ def render_rubbish(stage_root: Path, removed_records: Sequence[Record]) -> int:
 
 
 def migrate_legacy_root_layout(output_root: Path) -> None:
+    vault_runtime.ensure_global_roots(output_root.parent)
     for old_name, new_name in LEGACY_ROOT_MAPPINGS.items():
         old_path = output_root / old_name
-        new_path = output_root / new_name
         if not old_path.exists():
             continue
+        if new_name == ROOT_SEARCH:
+            new_path = vault_runtime.global_search_root(output_root.parent)
+        elif new_name == ROOT_RUBBISH:
+            new_path = vault_runtime.global_rubbish_root(output_root.parent)
+        else:
+            new_path = output_root / new_name
         if new_path.exists():
             if old_path.is_dir():
                 base.merge_dir_tree(old_path, new_path)
@@ -1268,6 +1285,7 @@ def migrate_legacy_root_layout(output_root: Path) -> None:
 
 
 def replace_target(output_root: Path, stage_root: Path) -> None:
+    vault_runtime.ensure_global_roots(output_root.parent)
     removable = {
         root_date_name(),
         root_author_name(),
@@ -1289,20 +1307,10 @@ def replace_target(output_root: Path, stage_root: Path) -> None:
             source = stage_root / name
             if source.exists():
                 shutil.move(str(source), str(output_root / name))
-
-        for name in (root_search_name(), root_rubbish_name()):
-            source = stage_root / name
-            if not source.exists():
-                continue
-            target = output_root / name
-            if target.exists():
-                base.merge_dir_tree(source, target)
-            else:
-                shutil.move(str(source), str(target))
     finally:
         shutil.rmtree(backup_dir, ignore_errors=True)
 
-    ensure_managed_roots(output_root)
+    vault_runtime.ensure_global_roots(output_root.parent)
 
 
 def ensure_managed_roots(output_root: Path) -> None:
@@ -1327,16 +1335,12 @@ def normalize_output_tree(output_root: Path) -> None:
     base.cleanup_duplicate_suffix_files(output_root / root_domain_name())
     base.cleanup_duplicate_suffix_files(output_root / ROOT_SOURCE)
     base.cleanup_duplicate_suffix_files(output_root / ROOT_COARSE)
-    base.cleanup_duplicate_suffix_files(output_root / root_search_name())
-    base.cleanup_duplicate_suffix_files(output_root / root_rubbish_name())
     base.cleanup_root_duplicate_files(output_root)
     base.cleanup_empty_duplicate_dirs(output_root / root_date_name())
     base.cleanup_empty_duplicate_dirs(output_root / root_domain_name())
     base.cleanup_empty_duplicate_dirs(output_root / ROOT_SOURCE)
     base.cleanup_empty_duplicate_dirs(output_root / ROOT_COARSE)
-    base.cleanup_empty_duplicate_dirs(output_root / root_search_name())
-    base.cleanup_empty_duplicate_dirs(output_root / root_rubbish_name())
-    ensure_managed_roots(output_root)
+    vault_runtime.ensure_global_roots(output_root.parent)
 
 
 def validate_output(output_root: Path, expected_notes: int) -> Tuple[int, int]:
@@ -1365,6 +1369,7 @@ def sync_archive(
     title_language: str = "zh",
     taxonomy_path: Optional[Path] = None,
     container_name: str = DEFAULT_CONTAINER_NAME,
+    missing_upstream_policy: str = "drop",
 ) -> Dict[str, object]:
     if classification != "auto":
         raise ValueError("Only classification=auto is supported in this version")
@@ -1373,6 +1378,7 @@ def sync_archive(
 
     input_json = Path(input_json).expanduser().resolve()
     target_root = Path(target_root).expanduser().resolve()
+    vault_runtime.migrate_resources_layout(target_root)
     output_root = target_root / container_name
 
     if not input_json.exists():
@@ -1391,8 +1397,19 @@ def sync_archive(
     for note_id, incoming_record in incoming.items():
         merged[note_id] = merge_records(existing.get(note_id), incoming_record, taxonomy_rules)
 
+    rubbish_ids = set(vault_runtime.collect_global_rubbish_signals(target_root)["小红书"]["ids"])
+    for note_id in list(merged.keys()):
+        if note_id in rubbish_ids:
+            merged.pop(note_id, None)
+
     removed_ids = sorted(set(existing.keys()) - set(incoming.keys()))
     removed_records = [existing[note_id] for note_id in removed_ids]
+    if mode == "merge" and missing_upstream_policy == "trash":
+        vault_runtime.trash_markdown_notes_by_frontmatter_field(
+            output_root / root_date_name(),
+            field="note_id",
+            ids=set(removed_ids),
+        )
 
     local_build_root = base.local_build_root_for_target(target_root, container_name)
     if local_build_root is not None:
@@ -1408,7 +1425,6 @@ def sync_archive(
 
     try:
         render_result = render_structure(stage_root, merged, collection_estimates, existing_root=output_root if mode == "merge" else None)
-        rubbish_moved = render_rubbish(stage_root, removed_records)
         replace_target(output_root, stage_root)
         ensure_local_root_taxonomy(output_root, taxonomy_source)
         normalize_output_tree(output_root)
@@ -1423,13 +1439,14 @@ def sync_archive(
         "mode": mode,
         "classification": classification,
         "title_language": title_language,
+        "missing_upstream_policy": missing_upstream_policy,
         "taxonomy_source": str(taxonomy_source),
         "existing_before": len(existing),
         "incoming": len(incoming),
         "final_notes": len(merged),
         "final_note_files": note_count,
         "final_md_files_under_date": md_count,
-        "rubbish_moved": len(removed_records),
+        "rubbish_moved": 0,
         "collection_count": render_result["collection_count"],
         "top_domains": render_result["top_domains"],
         "top_domain_count": render_result["top_domain_count"],
@@ -1454,6 +1471,7 @@ def main() -> None:
         title_language=args.title_language,
         taxonomy_path=Path(args.taxonomy_path) if args.taxonomy_path else None,
         container_name=args.container_name,
+        missing_upstream_policy=args.missing_upstream_policy,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 

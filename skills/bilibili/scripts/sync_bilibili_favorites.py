@@ -20,12 +20,19 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT_SCRIPTS_DIR = SCRIPT_DIR.parents[2] / "scripts"
+if str(ROOT_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_SCRIPTS_DIR))
+
+import vault_runtime
+
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 ROOT_TAXONOMY_FILENAME = "ROOT分类目录.md"
 DEFAULT_CONTAINER_NAME = "B站"
 DEFAULT_TAXONOMY_PATH = Path(
-    "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/书签库/ROOT分类目录.md"
+    Path.cwd() / "04-Resources" / "书签" / "ROOT分类目录.md"
 )
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 DATE_DIRNAME = "01 日期"
@@ -148,6 +155,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manual-rules", help="Optional Markdown taxonomy path to override the default ROOT taxonomy")
     parser.add_argument("--title-language", choices=["zh", "en"], default="zh")
     parser.add_argument("--helper-script", help="Optional fetch helper script path")
+    parser.add_argument(
+        "--missing-upstream-policy",
+        choices=["drop", "trash"],
+        default="drop",
+        help="How to handle local notes that disappear from the upstream snapshot during merge",
+    )
     return parser.parse_args()
 
 
@@ -1157,8 +1170,7 @@ def render_structure(
     existing_root: Optional[Path] = None,
 ) -> Dict[str, int]:
     output_root.mkdir(parents=True, exist_ok=True)
-    ensure_search_root(output_root, existing_root)
-    ensure_rubbish_root(output_root, existing_root)
+    vault_runtime.ensure_global_roots(output_root.parent)
     note_paths = render_primary_notes(output_root, records)
     folder_catalog = folder_catalog_from_payload(raw_folders, records)
     render_author_indexes(output_root, records, note_paths)
@@ -1179,8 +1191,6 @@ def validate_output(root_dir: Path, expected_notes: int) -> Tuple[int, int]:
         root_dir / FOLDER_DIRNAME,
         root_dir / DOMAIN_DIRNAME,
         root_dir / COARSE_DOMAIN_DIRNAME,
-        root_dir / SEARCH_DIRNAME,
-        root_dir / RUBBISH_DIRNAME,
         root_dir / "Dashboard.md",
     ]
     for path in required:
@@ -1316,6 +1326,7 @@ def replace_target(root_dir: Path, stage_root: Path) -> None:
     if root_dir.exists():
         shutil.rmtree(root_dir)
     shutil.copytree(stage_root, root_dir)
+    vault_runtime.ensure_global_roots(root_dir.parent)
 
 
 def read_json_file(path: Path) -> Dict[str, Any]:
@@ -1360,6 +1371,7 @@ def main() -> int:
     set_active_language(args.title_language)
 
     target_root = Path(args.target_root).expanduser().resolve()
+    vault_runtime.migrate_resources_layout(target_root)
     output_root = target_root / args.container_name
     normalize_output_tree(output_root)
     taxonomy_path = resolve_taxonomy_path(output_root, args.classification, args.manual_rules)
@@ -1378,9 +1390,14 @@ def main() -> int:
         merged = incoming
         new_ids = set(merged)
         sync_removed_ids = set()
+    rubbish_ids = set(vault_runtime.collect_global_rubbish_signals(target_root)["B站"]["ids"])
+    merged = {record_id: record for record_id, record in merged.items() if record.bvid not in rubbish_ids}
     merged, removed_ids = prune_unwanted_records(merged)
     new_ids -= removed_ids
     removed_ids |= sync_removed_ids
+    if args.mode == "merge" and args.missing_upstream_policy == "trash":
+        existing_date_root = resolve_existing_stable_root(output_root, LEGACY_DATE_DIRNAMES) or (output_root / DATE_DIRNAME)
+        vault_runtime.trash_markdown_notes_by_frontmatter_field(existing_date_root, field="record_id", ids=set(removed_ids))
 
     local_build_root = local_build_root_for_target(target_root, args.container_name)
     if local_build_root is not None:
@@ -1411,6 +1428,7 @@ def main() -> int:
         "folder_count": result["folder_count"],
         "new_count": len(new_ids),
         "removed_count": len(removed_ids),
+        "missing_upstream_policy": args.missing_upstream_policy,
         "primary_note_count": note_count,
         "total_md_count": total_md_count,
     }
