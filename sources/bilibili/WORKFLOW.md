@@ -1,8 +1,3 @@
----
-name: bilibili-favorites-to-obsidian
-description: Export the current Bilibili account's video favorites into an Obsidian-ready Markdown archive, preserving folder views and semantic taxonomy classification.
----
-
 # B站收藏到 Obsidian
 
 ## Overview
@@ -32,7 +27,7 @@ v1 固定保留三种浏览方式：
 - `classification`: `auto`
 - `title-language`: `zh`
 
-这里的 `merge` 对 B站 skill 的语义是：
+这里的 `merge` 对 B站 workflow 的语义是：
 - 保留本地规则文档、`06 搜索/`、`07 废弃/` 等受管目录
 - 但视频主数据以上游 B站收藏状态为准
 - 上游有的留下，上游新增的加入，上游没有的从本地同步移除
@@ -108,13 +103,13 @@ v1 固定保留三种浏览方式：
 7. 运行抓取 helper：
 
 ```bash
-node scripts/fetch_bilibili_favorites.mjs
+node sources/bilibili/scripts/fetch_bilibili_favorites.mjs
 ```
 
 8. 运行同步脚本：
 
 ```bash
-python3 scripts/sync_bilibili_favorites.py \
+python3 sources/bilibili/scripts/sync_bilibili_favorites.py \
   --target-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources" \
   --mode merge \
   --classification auto \
@@ -130,7 +125,7 @@ python3 scripts/sync_bilibili_favorites.py \
 `manual` 模式默认接受 Markdown taxonomy：
 - 优先显式传入路径
 - 其次使用 `B站/04 领域/ROOT分类目录.md`
-- 再其次使用 `/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/书签库/ROOT分类目录.md`
+- 再其次使用 `/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/书签/ROOT分类目录.md`
 
 ## Rubbish
 
@@ -146,7 +141,7 @@ python3 scripts/sync_bilibili_favorites.py \
 生成完成后，可以用搜索脚本把查询结果写入 `06 搜索/`：
 
 ```bash
-python3 scripts/search_bilibili_favorites.py \
+python3 sources/bilibili/scripts/search_bilibili_favorites.py \
   --archive-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/B站" \
   --query "AI 教程"
 ```

@@ -1,15 +1,10 @@
----
-name: xhs-favorites-to-obsidian
-description: Use when exporting Xiaohongshu favorites into an Obsidian-ready Markdown archive with semantic taxonomy, collection indexes, and repeatable merge sync.
----
-
 # 小红书收藏到 Obsidian
 
 ## Overview
 
 Core purpose: convert exported Xiaohongshu HTML lists into a local Markdown archive under `小红书/`.
 
-This skill is modeled after `$x-to-obsidian`, but it no longer treats browser crawling as the primary input. The preferred path is local HTML export files for `收藏` and `喜欢`, then sync into Obsidian.
+This workflow is modeled after the X source workflow, but it no longer treats browser crawling as the primary input. The preferred path is local HTML export files for `收藏` and `喜欢`, then sync into Obsidian.
 
 ## Fixed defaults in this version
 
@@ -20,7 +15,7 @@ This skill is modeled after `$x-to-obsidian`, but it no longer treats browser cr
 - source role: semantic taxonomy + source indexes coexist
 - classification: `auto` only
 - default target root: `/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources`
-- default taxonomy note: `/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/书签库/ROOT分类目录.md`
+- default taxonomy note: `/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources/书签/ROOT分类目录.md`
 
 ## Required inputs
 
@@ -63,7 +58,7 @@ If the user provides a path ending in `/小红书`, treat it as the intended fin
 7. Run export:
 
 ```bash
-python3 scripts/export_xhs_favorites.py \
+python3 sources/xhs/scripts/export_xhs_favorites.py \
   --favorites-html "/path/to/收藏.html" \
   --liked-html "/path/to/喜欢.html" \
   --output-json "$CODEX_HOME/state/xhs-favorites/latest-export.json"
@@ -72,7 +67,7 @@ python3 scripts/export_xhs_favorites.py \
 8. Run sync:
 
 ```bash
-python3 scripts/sync_xhs_favorites.py \
+python3 sources/xhs/scripts/sync_xhs_favorites.py \
   --input-json "$CODEX_HOME/state/xhs-favorites/latest-export.json" \
   --target-root "/Users/Totoro/Library/Mobile Documents/iCloud~md~obsidian/Documents/Totoro/04-Resources" \
   --mode merge \
@@ -89,7 +84,7 @@ python3 scripts/sync_xhs_favorites.py \
 
 ## Current crawler behavior
 
-- Preferred input is plugin-exported HTML.
+- Preferred input is HTML exported by an external Xiaohongshu exporter.
 - `收藏` and `喜欢` can be imported separately, then merged by `note_id`.
 - Browser-driven enrichment remains best-effort only and should not be the default because it can trigger platform risk controls.
 - If enrichment is attempted, it may reuse:

@@ -1,6 +1,6 @@
 # Taxonomy Policy
 
-This plugin owns the shared taxonomy policy layer for all plugin-local archive entry skills.
+This skill owns the shared taxonomy policy layer for all openvault source workflows.
 
 ## Precedence
 
@@ -28,5 +28,5 @@ For merge or update flows:
 
 ## Scope Notes
 
-- `书签库` shares taxonomy policy only; it keeps its own categories-only archive shape
-- `小红书`, `B站`, and `X Likes` use this policy for their domain taxonomy decisions inside their existing managed archive structures
+- `书签` shares taxonomy policy only; it keeps its own categories-only archive shape
+- `小红书`, `B站`, and `X` use this policy for their domain taxonomy decisions inside their existing managed archive structures

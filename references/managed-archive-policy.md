@@ -1,16 +1,16 @@
 # Managed Archive Policy
 
-This policy applies only to the managed archive workflows exposed by this plugin:
+This policy applies only to the managed archive workflows exposed by this skill:
 
 - `小红书`
 - `B站`
-- `X Likes`
+- `X`
 
-It does not apply to `书签库`, which keeps its existing categories-only structure.
+It does not apply to `书签`, which keeps its existing categories-only structure.
 
 ## Canonical Roots
 
-Preserve each source workflow's existing managed roots and naming conventions. The plugin should not invent a new root layout in v1.
+Preserve each source workflow's existing managed roots and naming conventions. The skill entry should not invent a new root layout in v1.
 
 ## Cleanup Expectations
 
@@ -30,4 +30,4 @@ When the source workflow models upstream removals via a rubbish root:
 
 ## Publish Rule
 
-The plugin entry layer must preserve the current source workflow's publish behavior and output contract. v1 must not rewrite the managed archive engines.
+The skill entry layer must preserve the current source workflow's publish behavior and output contract. v1 must not rewrite the managed archive engines.

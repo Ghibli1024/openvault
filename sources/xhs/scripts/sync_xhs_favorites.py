@@ -25,9 +25,9 @@ from zoneinfo import ZoneInfo
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SKILLS_DIR = SCRIPT_DIR.parent.parent
-BASE_SYNC_PATH = SKILLS_DIR / "x-likes" / "scripts" / "sync_x_likes.py"
-ROOT_SCRIPTS_DIR = SKILLS_DIR.parent / "scripts"
+SOURCES_DIR = SCRIPT_DIR.parent.parent
+BASE_SYNC_PATH = SOURCES_DIR / "x-likes" / "scripts" / "sync_x_likes.py"
+ROOT_SCRIPTS_DIR = SOURCES_DIR.parent / "scripts"
 
 ROOT_DATE = "01 日期"
 ROOT_AUTHOR = "02 作者"

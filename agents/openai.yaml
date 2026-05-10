@@ -1,0 +1,4 @@
+interface:
+  display_name: "openvault"
+  short_description: "把书签、小红书、B站、X 收藏整理成 Markdown 资源库"
+  default_prompt: "Use $openvault to import, sync, search, and clean a local Markdown resources archive across 书签、小红书、B站、X."

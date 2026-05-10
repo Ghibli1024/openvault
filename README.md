@@ -2,209 +2,167 @@
 
 [![README-English](https://img.shields.io/badge/README-English-2d6cdf?style=for-the-badge)](README.md)
 [![README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87](https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555?style=for-the-badge)](README.zh-CN.md)
+[![Local-first](https://img.shields.io/badge/local--first-private-2F7A5D?style=for-the-badge)](#privacy-and-safety)
 
-`openvault` is a local-first Codex plugin for turning bookmark exports and social favorites into a structured Markdown resources library.
+`openvault` is a local-first agent skill that turns browser bookmarks and social favorites into one Obsidian-ready Markdown resources library.
 
-It is designed for a single visible plugin entry plus a small set of internal canonical workflows:
+It is for people who do not want four disconnected export piles. Give your agent a bookmark HTML export, Xiaohongshu HTML export, local Bilibili favorites, or X likes JSON; `openvault` routes the job, preserves your local taxonomy when it exists, and writes the result into a durable Markdown archive.
 
-- one visible router skill: `archive-router`
-- four internal canonical source skills:
-  - `bookmarks`
-  - `xhs`
-  - `bilibili`
-  - `x-likes`
+```text
+Bookmarks / Xiaohongshu / Bilibili / X
+        -> openvault
+        -> <resources-root>/{书签,小红书,B站,X,搜索,废弃}
+```
 
-The plugin's current operating model is:
+[Install](#install) · [Use it](#use-it) · [Supported sources](#supported-sources) · [Output preview](#output-preview) · [Develop](#develop)
 
-- one visible entry in the Codex UI
-- one shared resources root
-- source-specific sync/import engines underneath
-- global `search/` and `rubbish/` behavior across sources
+---
 
-## What The Plugin Does
+## Install
 
-`openvault` is for people who want one resources library instead of a pile of unrelated exports.
+Install the skill with the open agent skills CLI:
 
-Given supported source inputs, it can:
+```bash
+npx skills add Ghibli1024/openvault -g -a codex
+```
 
-- import browser bookmark HTML into a Markdown archive
-- sync Xiaohongshu favorites or likes exports into Markdown
-- sync Bilibili favorites into Markdown
-- sync X likes JSON exports into Markdown
-- keep source-specific browsing views where useful
-- apply existing taxonomy notes instead of replacing them silently
-- write search results into a shared global search folder
-- use a shared global rubbish folder as the manual removal queue
-- keep the whole workflow local to your machine and vault
+Useful variants:
 
-## Current Information Architecture
+```bash
+# List what the repository exposes before installing
+npx skills add Ghibli1024/openvault --list
 
-The plugin assumes a shared resources root similar to:
+# Install for every detected compatible agent
+npx skills add Ghibli1024/openvault --all
+```
+
+Restart Codex or your target agent after installation so the new `openvault` skill is discovered.
+
+## Use It
+
+Ask naturally:
+
+```text
+Use openvault to import this bookmarks HTML into <resources-root>.
+Use openvault to sync my Bilibili favorites into <resources-root>.
+Use openvault to import these Xiaohongshu favorites and likes HTML files.
+Use openvault to import this X likes JSON.
+Use openvault to search "AI design tools" across <resources-root>.
+Use openvault to clean the rubbish queue under <resources-root>.
+```
+
+The root [SKILL.md](SKILL.md) is the only agent entry. Source-specific details live under `sources/*/WORKFLOW.md` and are loaded only after routing.
+
+## Supported Sources
+
+| Source | Input | Main output | Best for |
+|---|---|---|---|
+| Bookmarks | Netscape-style browser bookmark HTML from Chrome, Edge, Firefox, or similar exporters | `书签/` category tree with `ROOT分类目录.md` | Long-lived web resource library |
+| Xiaohongshu | Exported favorites HTML and optional likes HTML | `小红书/` with date, author, source, taxonomy, coarse-category, and dashboard views | Inspiration, lifestyle, visual references |
+| Bilibili | Current favorites from the local logged-in browser environment | `B站/` with date, uploader, folder, taxonomy, coarse-category, and dashboard views | Video resource library |
+| X Likes | Likes JSON from an upstream exporter | `X/` with date, author, taxonomy, and dashboard views | Information-stream capture |
+
+## Output Preview
+
+`openvault` expects a shared resources root like this:
 
 ```text
 <resources-root>/
 ├── 书签/
+│   ├── ROOT分类目录.md
+│   ├── Index.md
+│   └── <taxonomy folders>/
 ├── 小红书/
+│   ├── 01 日期/
+│   ├── 02 作者/
+│   ├── 03 来源/
+│   ├── 04 领域/
+│   ├── 05 粗分类/
+│   └── Dashboard.md
 ├── B站/
+│   ├── 01 日期/
+│   ├── 02 UP主/
+│   ├── 03 收藏夹/
+│   ├── 04 领域/
+│   ├── 05 粗分类/
+│   └── Dashboard.md
 ├── X/
+│   ├── 01 Date/
+│   ├── 02 Author/
+│   ├── 03 Domain/
+│   └── Dashboard.md
 ├── 搜索/
 └── 废弃/
 ```
 
-The four source roots keep their source-specific main views. For example:
+Example sync summary shape:
 
-- `书签/` keeps the bookmark archive layout and taxonomy files
-- `小红书/` keeps date, author, source, taxonomy, coarse-category, and dashboard views
-- `B站/` keeps date, uploader, folder, taxonomy, coarse-category, and dashboard views
-- `X/` keeps date, author, taxonomy, and dashboard views
+```text
+source: bookmarks
+input: <path-to-export.html>
+output: <resources-root>/书签
+taxonomy: existing ROOT分类目录.md
+mode: merge
+created: 42
+updated: 8
+removed: 3
+```
 
-The global roots are intentionally shared:
+## Core Rules
 
-- `搜索/`
-  Stores cross-source search result notes
-- `废弃/`
-  Stores manual removal notes, raw URLs, or moved notes that should be filtered out from later sync output
+### One Skill Entry
 
-## Supported Inputs
+`openvault` exposes one root `SKILL.md`. It detects the source, then reads the matching source workflow:
 
-### Bookmarks
+- `sources/bookmarks/WORKFLOW.md`
+- `sources/xhs/WORKFLOW.md`
+- `sources/bilibili/WORKFLOW.md`
+- `sources/x-likes/WORKFLOW.md`
 
-Input:
+### Preserve Local Taxonomy
 
-- bookmark-style HTML exports from browsers such as Chrome, Edge, Firefox, or similar Netscape-style exporters
+When a target archive already has `ROOT分类目录.md`, treat it as the source of truth. Incoming exports can add evidence, but they should not silently replace the user's classification tree.
 
-Output:
+Precedence:
 
-- a Markdown archive under `书签/`
-- local taxonomy-driven category structure
-- compact category browsing optimized for vault use
+1. Explicit taxonomy or rules path from the user
+2. Existing local archive `ROOT分类目录.md`
+3. Source workflow default taxonomy fallback
 
-### Xiaohongshu
+### Global Search And Rubbish
 
-Input:
+Search and manual rubbish are shared at the resources-root level:
 
-- exported HTML files for favorites and optionally likes
+- `搜索/` stores cross-source search result notes.
+- `废弃/` stores local editorial removal intent.
 
-Output:
-
-- a Markdown archive under `小红书/`
-- date, author, source, taxonomy, coarse-category, and dashboard views
-
-### Bilibili
-
-Input:
-
-- current Bilibili favorites from the local logged-in browser environment
-
-Output:
-
-- a Markdown archive under `B站/`
-- date, uploader, folder, taxonomy, coarse-category, and dashboard views
-
-### X Likes
-
-Input:
-
-- exported likes JSON from an upstream exporter
-
-Output:
-
-- a Markdown archive under `X/`
-- date, author, taxonomy, and dashboard views
-
-## Core Behaviors
-
-### 1. Single Visible Entry
-
-The Codex UI should expose only one visible plugin entry:
-
-- `archive-router`
-
-That entry is responsible for routing import, sync, search, and rubbish-cleanup requests to the correct canonical workflow.
-
-### 2. Source-Specific Sync, Shared Library Semantics
-
-The plugin does not force all sources into one identical disk layout.
-
-Instead:
-
-- source-specific engines keep the views that are useful for that source
-- shared rules apply at the resources-root level
-
-Examples of shared rules:
-
-- search results belong in the shared `搜索/`
-- manual removal intent belongs in the shared `废弃/`
-- implicit full-library search should search across all source roots
-
-### 3. Manual Rubbish vs. Upstream Deletion
-
-`openvault` distinguishes between two different deletion meanings:
-
-- manual rubbish
-  A local editorial decision. A note or URL placed in the global `废弃/` should be filtered out from later generated views.
-- authoritative upstream deletion
-  When a user explicitly asks for a local-vs-cloud authoritative sync, missing local items may be moved to the operating system trash instead of being written into the shared `废弃/`.
-
-This distinction exists so the shared `废弃/` folder stays a manual curation queue rather than a catch-all for every sync diff.
-
-### 4. Taxonomy Preservation
-
-The plugin tries to preserve an archive's existing taxonomy whenever that taxonomy already exists locally.
-
-Typical behavior:
-
-- keep a local `ROOT分类目录.md` when present
-- prefer an existing local archive taxonomy over silently inventing a parallel one
-- use source-specific defaults only when no local taxonomy exists
+Manual rubbish is not the same as authoritative upstream deletion. If the user explicitly asks for a local-vs-cloud authoritative sync, a source workflow may remove missing items differently. Otherwise, `废弃/` remains the manual curation queue.
 
 ## Privacy And Safety
 
-This plugin is intentionally local-first.
+`openvault` is intentionally local-first.
 
-### Privacy principles
-
-- examples in this repository use placeholders such as `<resources-root>` and `<path-to-export>`
-- personal vault paths should not be hardcoded into documentation or scripts unless a local runtime needs them internally
-- raw exports, personal favorites, and generated notes may contain sensitive interests, account names, URLs, and browsing history
-- keep the resources library on storage you control
-- do not commit personal exports, generated archives, or state files into a public repository unless intentionally sanitized
-
-### Credential handling
-
-- bookmark, Xiaohongshu, and X workflows operate on user-provided export files
-- the Bilibili workflow relies on the local logged-in browser environment instead of asking you to paste credentials into the repository
-- the repository itself is not meant to store account secrets
-
-### Cache refresh safety
-
-The local cache refresh script updates Codex's cached plugin clone and reports:
-
-- cache commit before refresh
-- cache commit after refresh
-- target commit
-- visible skill count
-
-This helps verify plugin visibility changes without exposing personal vault paths in the README.
+- Repository examples use placeholders such as `<resources-root>` and `<path-to-export>`.
+- Raw exports, generated notes, account names, URLs, and browsing history may be sensitive.
+- Do not commit personal exports, generated archives, state files, or vault-specific absolute paths to a public repository unless you have sanitized them.
+- Bookmark, Xiaohongshu, and X workflows operate on user-provided export files.
+- The Bilibili workflow relies on the local logged-in browser environment instead of storing credentials in the repository.
 
 ## Repository Layout
 
 ```text
 openvault/
-├── .codex-plugin/
-│   └── plugin.json
-├── README.md
-├── README.zh-CN.md
+├── SKILL.md
+├── agents/
+│   └── openai.yaml
 ├── references/
 │   ├── managed-archive-policy.md
 │   └── taxonomy-policy.md
 ├── scripts/
 │   ├── detect_source.py
-│   ├── refresh_openvault_cache.py
 │   ├── search_resources.py
 │   └── vault_runtime.py
-├── skills/
-│   ├── archive-router/
+├── sources/
 │   ├── bilibili/
 │   ├── bookmarks/
 │   ├── x-likes/
@@ -212,87 +170,41 @@ openvault/
 └── tests/
 ```
 
-### Important files
+Important files:
 
-- `.codex-plugin/plugin.json`
-  Plugin metadata and visible UI behavior
-- `scripts/detect_source.py`
-  Lightweight source detection helper used by the router
-- `scripts/vault_runtime.py`
-  Shared runtime for resources-root migration, global search/rubbish handling, and shared path rules
-- `scripts/search_resources.py`
-  Global cross-source search helper
-- `scripts/refresh_openvault_cache.py`
-  Explicit local Codex cache refresh helper
+| Path | Purpose |
+|---|---|
+| `SKILL.md` | Single agent entry and router |
+| `sources/*/WORKFLOW.md` | Source-specific operating instructions |
+| `references/taxonomy-policy.md` | Shared taxonomy precedence |
+| `references/managed-archive-policy.md` | Shared managed-archive cleanup expectations |
+| `scripts/detect_source.py` | Lightweight source detection helper |
+| `scripts/vault_runtime.py` | Shared resources-root path and migration helpers |
+| `scripts/search_resources.py` | Cross-source Markdown search helper |
 
-## How To Use The Plugin
+## Develop
 
-### In Codex UI
-
-Use the single visible `openvault` entry for requests like:
-
-- import a bookmarks HTML export into the resources root
-- sync Xiaohongshu favorites into the resources root
-- sync Bilibili favorites into the resources root
-- import X likes JSON into the resources root
-- search across the whole resources library
-- clean up the shared rubbish folder
-
-### Typical requests
-
-Examples of the kind of requests the router is designed to understand:
-
-- import bookmarks HTML into `<resources-root>`
-- sync Bilibili favorites into `<resources-root>`
-- import Xiaohongshu favorites into `<resources-root>`
-- import X likes JSON into `<resources-root>`
-- search `AI design tools` in `<resources-root>`
-- clean up the rubbish queue under `<resources-root>`
-
-## Refreshing The Local Codex Cache
-
-If Codex UI still shows stale skill entries after the repository is updated, refresh the local cache clone explicitly.
-
-Dry run:
+Run the test suite with the standard-library runner:
 
 ```bash
-python3 scripts/refresh_openvault_cache.py --dry-run
+GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main python3 -m unittest discover -s tests
+python3 -m unittest discover -s sources/bookmarks/tests
+python3 -m unittest discover -s sources/x-likes/tests
+python3 -m unittest discover -s sources/xhs/tests
+python3 -m unittest discover -s sources/bilibili/tests
 ```
 
-Actual refresh:
+Verify skill discovery:
 
 ```bash
-python3 scripts/refresh_openvault_cache.py
+npx skills add . --list
 ```
 
-The script reports:
-
-- whether the plugin is enabled in `~/.codex/config.toml`
-- source repo commit
-- cache clone commit before refresh
-- target commit
-- whether a refresh was needed
-- visible skill count after refresh
-
-This is the intended workflow when the local UI appears out of sync with the repository.
-
-## Development Notes
-
-The plugin intentionally keeps the canonical source workflows separate instead of forcing everything into one monolithic engine.
-
-That tradeoff is deliberate:
-
-- the visible UX remains simple
-- source-specific sync logic can still evolve independently
-- shared runtime rules stay centralized
+Expected result: one available skill named `openvault`.
 
 ## Limitations
 
-- supported inputs still depend on source-specific exporters or local browser state
-- the plugin does not attempt to normalize every source into an identical schema
-- the plugin does not provide semantic RAG search by default
-- the shared `废弃/` semantics depend on later sync passes to remove items from generated source views
-
-## Historical Note
-
-Historical source repositories and older workflow shapes are being retained temporarily as migration background while `openvault` becomes the canonical plugin home.
+- Supported inputs still depend on source-specific exporters or local browser state.
+- The skill does not provide semantic RAG search by default.
+- It does not normalize every source into an identical schema.
+- Global `废弃/` semantics depend on later sync passes to remove items from generated source views.

@@ -1,13 +1,8 @@
----
-name: html-bookmarks-to-markdown
-description: Convert bookmark-style HTML exports into a locally stored Markdown category tree driven by a user-owned taxonomy, prioritizing semantic classification from the chosen local taxonomy over the incoming HTML folder structure, with a built-in default taxonomy for new users and minimal state for future syncs.
----
-
 # HTML Bookmarks Markdown Sync
 
 ## Overview
 
-Use this skill when the user provides a bookmark-style HTML export and wants a Markdown bookmark archive whose primary output is a category tree.
+Use this workflow when the user provides a bookmark-style HTML export and wants a Markdown bookmark archive whose primary output is a category tree.
 
 The default workflow is now `categories-only`:
 - classify links by a local reference Markdown taxonomy,
@@ -20,7 +15,7 @@ Taxonomy bootstrap rules:
 - if the archive already has `ROOT分类目录.md`, use it by default on later runs
 - if the user starts from an empty folder, first generate a candidate `ROOT分类目录.md` from the HTML tree
 - then ask whether to keep that generated file or replace it with the built-in template
-- the built-in template lives at `references/default_root_taxonomy.md`
+- the built-in template lives at `sources/bookmarks/references/default_root_taxonomy.md`
 - if the workflow must proceed non-interactively and no taxonomy file exists yet, fall back to the built-in template and write it into `ROOT分类目录.md`
 
 Important classification rule:
@@ -75,7 +70,7 @@ Legacy `full` mode:
 
 ## Interaction Style
 
-When the skill is triggered, use a short one-question-at-a-time flow by default.
+When the workflow is triggered, use a short one-question-at-a-time flow by default.
 
 Collect or confirm:
 1. `input-html`
@@ -87,7 +82,7 @@ Collect or confirm:
 
 If the user points to an existing archive and wants `merge`, inspect it first and preserve its established taxonomy unless they explicitly ask for a rewrite.
 
-Every time this skill is used, tell the user which taxonomy source will be used:
+Every time this workflow is used, tell the user which taxonomy source will be used:
 - if `ROOT分类目录.md` already exists, say it will be used by default
 - if it does not exist, say you will first create a candidate `ROOT分类目录.md` from the HTML and then let them choose between that candidate and the built-in template
 
@@ -114,7 +109,7 @@ Reference priority rules:
 - if no taxonomy file exists yet:
   - first generate `ROOT分类目录.md` from the HTML categories
   - ask the user whether to keep that generated file as the initial template or replace it with the built-in template
-  - if they choose the built-in template, write `references/default_root_taxonomy.md` into `ROOT分类目录.md`
+  - if they choose the built-in template, write `sources/bookmarks/references/default_root_taxonomy.md` into `ROOT分类目录.md`
 
 ## Output Contract
 
@@ -148,7 +143,7 @@ Example:
 1. Confirm the HTML path, archive location, and taxonomy reference Markdown.
 2. If `ROOT分类目录.md` already exists, use it as the default taxonomy.
 3. If it does not exist, first generate a candidate `ROOT分类目录.md` from the incoming HTML.
-4. Ask the user whether to keep the generated candidate or replace it with `references/default_root_taxonomy.md`.
+4. Ask the user whether to keep the generated candidate or replace it with `sources/bookmarks/references/default_root_taxonomy.md`.
 5. Strip legacy bookmark roots and classify each bookmark semantically into the chosen taxonomy.
 6. Read any URLs under the root `# 手动` section, classify them too, then clear that list.
 7. Render only category directories with `Index.md` files.
@@ -157,7 +152,7 @@ Example:
 
 Health-check command:
 ```bash
-python3 scripts/check_bookmark_archive.py \
+python3 sources/bookmarks/scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
   --state-root "/path/to/state-root" \
@@ -166,7 +161,7 @@ python3 scripts/check_bookmark_archive.py \
 
 Legacy full-mode command:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -178,7 +173,7 @@ python3 scripts/sync_bookmark_html.py \
 
 ## Legacy Full-Mode Notes
 
-The sections below describe older `full`-mode workflows such as external import, pending annotations, autofill, and report-heavy syncs. They are still useful when the user explicitly asks for the old archive shape, but they are no longer the default operating mode of this skill.
+The sections below describe older `full`-mode workflows such as external import, pending annotations, autofill, and report-heavy syncs. They are still useful when the user explicitly asks for the old archive shape, but they are no longer the default operating mode of this workflow.
 
 ## External Import Into Existing Archive
 
@@ -205,7 +200,7 @@ Recommended strategy:
 
 Use the batch filter helper:
 ```bash
-python3 scripts/filter_pending_annotations.py \
+python3 sources/bookmarks/scripts/filter_pending_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
   --category-prefix "书签工具栏/资源书签/项目分支" \
   --output "/path/to/batches/project-branch.json"
@@ -218,7 +213,7 @@ Then fill `description`, optional `note`, and optional `tags` in that batch file
 When the user explicitly wants everything filled without waiting for review, use the autofill helper to generate first-pass descriptions for every remaining pending URL:
 
 ```bash
-python3 scripts/autofill_annotations.py \
+python3 sources/bookmarks/scripts/autofill_annotations.py \
   --pending-json "/path/to/state-root/pending_annotations.json" \
   --output "/path/to/batches/autofill-all.json"
 ```
@@ -226,7 +221,7 @@ python3 scripts/autofill_annotations.py \
 Then sync it back:
 
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -276,7 +271,7 @@ Filtered links should:
 
 First sync or later incremental sync:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -287,7 +282,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Single-folder compact example:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -299,7 +294,7 @@ python3 scripts/sync_bookmark_html.py \
 
 External HTML import into existing `Bookmarks`:
 ```bash
-python3 scripts/import_external_bookmark_html.py \
+python3 sources/bookmarks/scripts/import_external_bookmark_html.py \
   --input-html "/path/to/external-bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
@@ -309,7 +304,7 @@ python3 scripts/import_external_bookmark_html.py \
 
 Post-run structure check:
 ```bash
-python3 scripts/check_bookmark_archive.py \
+python3 sources/bookmarks/scripts/check_bookmark_archive.py \
   --target-root "/path/to/archive-root" \
   --container-name "Bookmarks" \
   --state-root "/path/to/archive-root/Bookmarks/_state"
@@ -317,7 +312,7 @@ python3 scripts/check_bookmark_archive.py \
 
 Relative-path example:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "./exports/bookmarks.html" \
   --target-root "./notes" \
   --container-name "网页聚合" \
@@ -328,7 +323,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Import descriptions for pending URLs and re-render:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -340,7 +335,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Full rebuild from the latest HTML only:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \
@@ -351,7 +346,7 @@ python3 scripts/sync_bookmark_html.py \
 
 Legacy per-URL layout:
 ```bash
-python3 scripts/sync_bookmark_html.py \
+python3 sources/bookmarks/scripts/sync_bookmark_html.py \
   --input-html "/path/to/bookmarks.html" \
   --target-root "/path/to/archive-root" \
   --container-name "HTML Bookmarks" \

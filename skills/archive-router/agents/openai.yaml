@@ -1,4 +1,0 @@
-interface:
-  display_name: "openvault"
-  short_description: "单入口处理导入、同步、全局搜索和废弃清理"
-  default_prompt: "Use $archive-router as the single visible openvault entry for import, sync, global search, and rubbish cleanup across 书签、小红书、B站、X."

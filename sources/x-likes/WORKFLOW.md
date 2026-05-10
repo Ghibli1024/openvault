@@ -1,8 +1,3 @@
----
-name: x-to-obsidian
-description: Convert X (Twitter) likes JSON exports into an Obsidian-ready local Markdown archive, with user-controlled merge/create and auto/manual classification.
----
-
 # X to Ob
 
 ## Overview
@@ -14,7 +9,7 @@ Obsidian is a primary target, but output is plain Markdown and works in other ed
 
 Collect and confirm all of these before running:
 1. JSON path.
-2. Target root `XX` (output at `XX/X Likes/`).
+2. Target root `XX` (output at `XX/X/`).
 3. Write mode: `merge` or `create`.
 4. Classification mode: `auto` or `manual`.
 5. Manual classification source if `manual` and no local `03 Domain/ROOT分类目录.md` is available (either pasted into the input box or given as another Markdown note path).
@@ -25,15 +20,15 @@ Do not assume defaults for `merge/create` or `auto/manual`.
 
 When the user has already selected `mode=merge` and is continuing the same intake flow or updating an existing archive, treat the current repository and the last confirmed answers in this session as the default for any later field the user does not explicitly restate. Only ask again when a later choice is genuinely ambiguous, conflicts with the existing archive, or changes the output structure.
 
-When the skill is triggered, do not jump straight to conversion. First tell the user exactly which inputs are required and what the allowed options are.
+When the workflow is triggered, do not jump straight to conversion. First tell the user exactly which inputs are required and what the allowed options are.
 
 Use a compact intake checklist that includes:
 - `JSON path`: absolute path to the X likes export JSON.
-- `target-root`: the parent directory `XX`; output will always be written to `XX/X Likes/`.
+- `target-root`: the parent directory `XX`; output will always be written to `XX/X/`.
 - `mode`: `merge` or `create`.
 - `classification`: `auto` or `manual`.
 - `auto-note`: only when `classification=auto`; do not ask the user to fill this in if a preferred Markdown classification note is already established for the workspace or conversation. Use that note automatically. Example: an already-designated note such as `文件夹目录索引.md`.
-- `manual-source`: required only when `classification=manual` and neither `X Likes/03 Domain/ROOT分类目录.md` nor an explicit rules path is available; otherwise allow blank. Accept either:
+- `manual-source`: required only when `classification=manual` and neither `X/03 Domain/ROOT分类目录.md` nor an explicit rules path is available; otherwise allow blank. Accept either:
   - pasted Markdown classification content in the input box
   - an absolute path to another Markdown classification note
 - `title-language`: `en` or `zh`.
@@ -68,15 +63,15 @@ Recommended question order:
 
 Do not require the user to answer in a single structured line unless the user explicitly asks for a compact form. A single-line template may be offered as an optional shortcut, not as the default.
 
-If the user provides a path ending in `/X Likes`, treat it as the intended final output folder, normalize `target-root` to its parent directory, and explicitly ask the user to confirm that normalization before running.
+If the user provides a path ending in `/X` or legacy `/X Likes`, treat it as the intended final output folder, normalize `target-root` to its parent directory, and explicitly ask the user to confirm that normalization before running.
 
-If the user is testing this skill and gives feedback on the workflow, wording, required inputs, or acceptable rule-source formats, treat that feedback as a request to update the skill. Modify this `SKILL.md` before continuing whenever the feedback changes future expected behavior.
+If the user is testing this workflow and gives feedback on the workflow, wording, required inputs, or acceptable rule-source formats, treat that feedback as a request to update the workflow. Modify this `WORKFLOW.md` before continuing whenever the feedback changes future expected behavior.
 
 If the user provides an existing archive/repository and the task is to update or merge into it, explicitly tell the user that the existing archive structure will be treated as the source of truth unless they clearly ask for a different behavior. If the user has already designated a preferred Markdown classification note for that repository, treat that note as part of the repository convention.
 
 ## Output Contract
 
-Final structure under `XX/X Likes/` (always fixed):
+Final structure under `XX/X/` (always fixed):
 - `01 Date/`
 - `02 Author/`
 - `03 Domain/`
@@ -117,7 +112,7 @@ When an existing archive/repository is provided and the task is an incremental u
 - inspect the existing archive first
 - treat the existing repository structure as authoritative, including current language choice, domain naming, and category layout
 - place new items into the existing taxonomy whenever possible instead of inventing a parallel category system
-- preserve the user's current classification style even if it differs from the default examples in this skill
+- preserve the user's current classification style even if it differs from the default examples in this workflow
 
 Priority rule:
 - if the user explicitly chooses an existing repository, selects `mode=merge`, and selects `classification=auto`, use the established default Markdown classification note plus JSON evidence only to map incoming posts into that repository's current structure
@@ -138,10 +133,10 @@ For manual mode, a Markdown note may be used as the classification-rule source. 
 If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类目录.md` taxonomy instead of the older hardcoded Markdown label map. In that case:
 - classify into the taxonomy tree semantically using title, full text, source URL, and host
 - map results directly into `03 Domain/` hierarchy
-- preserve the fixed root structure of `X Likes`
+- preserve the fixed root structure of `X`; accept `X Likes` only as a legacy folder that may be migrated
 - prefer rule-source priority:
   1. explicit `--manual-rules`
-  2. `X Likes/03 Domain/ROOT分类目录.md`
+  2. `X/03 Domain/ROOT分类目录.md`
   3. `references/default_root_taxonomy.md`
 
 ## Workflow
@@ -150,15 +145,15 @@ If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类
 2. For enum-like fields, default to showing compact selectable options with a one-line explanation for each option.
 3. If structured prompt-box choices are unavailable, simulate them in plain text and let the user answer with only the option value.
 4. Confirm user decisions.
-5. If the user supplied `/X Likes` instead of `target-root`, normalize to the parent directory and confirm the interpretation.
+5. If the user supplied `/X` or legacy `/X Likes` instead of `target-root`, normalize to the parent directory and confirm the interpretation.
 6. If the user points to an existing archive/repository and the task is `merge`, inspect that archive before running so you understand its current language and classification structure.
 7. In merge/update flows, state back that the existing repository structure will be preserved and used as the classification reference unless the user explicitly asks for a different structure. If the user has already confirmed some fields in the current intake, carry those forward for any later fields the user leaves implicit instead of re-asking for them.
 8. If `classification=auto`, automatically use the established default Markdown classification note for the workspace or conversation; do not ask for another rule source unless needed to disambiguate.
-9. If `classification=manual`, first look for `X Likes/03 Domain/ROOT分类目录.md`; only ask for another source if no local taxonomy exists and no explicit path was given.
-10. If the rule source is Markdown, parse or transform it into executable rules before running `scripts/sync_x_likes.py`.
+9. If `classification=manual`, first look for `X/03 Domain/ROOT分类目录.md`, then legacy `X Likes/03 Domain/ROOT分类目录.md`; only ask for another source if no local taxonomy exists and no explicit path was given.
+10. If the rule source is Markdown, parse or transform it into executable rules before running `sources/x-likes/scripts/sync_x_likes.py`.
 11. If the user explicitly asks to reclassify both new and existing posts with the chosen rule source, honor that request and say that the old structure will be rewritten to match that source.
-12. If the user is actively testing the skill and requests behavior changes, update this skill first.
-13. Run `scripts/sync_x_likes.py`.
+12. If the user is actively testing the workflow and requests behavior changes, update this workflow first.
+13. Run `sources/x-likes/scripts/sync_x_likes.py`.
 14. Read JSON summary.
 15. Verify output structure and constraints.
 16. Verify `01 Date` uses only four-digit year folders and Chinese numeric month folders such as `3 月`; no duplicate year folders like `2025 2` or English month folders such as `Mar`.
@@ -171,7 +166,7 @@ If the Markdown note contains `FORMAT: AI_OUTLINE_V1`, treat it as a `ROOT分类
 
 Auto:
 ```bash
-python3 scripts/sync_x_likes.py \
+python3 sources/x-likes/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode merge \
@@ -182,7 +177,7 @@ python3 scripts/sync_x_likes.py \
 
 Manual with explicit rules:
 ```bash
-python3 scripts/sync_x_likes.py \
+python3 sources/x-likes/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode create \
@@ -193,7 +188,7 @@ python3 scripts/sync_x_likes.py \
 
 Manual with local taxonomy fallback:
 ```bash
-python3 scripts/sync_x_likes.py \
+python3 sources/x-likes/scripts/sync_x_likes.py \
   --input-json "/path/to/export.json" \
   --target-root "/path/to/xx" \
   --mode merge \
