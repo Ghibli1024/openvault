@@ -1,70 +1,68 @@
 # openvault
 
-[![README-English](https://img.shields.io/badge/README-English-2d6cdf?style=for-the-badge)](README.md)
-[![README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87](https://img.shields.io/badge/README-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555555?style=for-the-badge)](README.zh-CN.md)
-[![Local-first](https://img.shields.io/badge/local--first-private-2F7A5D?style=for-the-badge)](#privacy-and-safety)
+中文 | [English](README.en.md)
 
-`openvault` is a local-first agent skill that turns browser bookmarks and social favorites into one Obsidian-ready Markdown resources library.
+`openvault` 是一个本地优先的 agent skill，用来把浏览器书签、小红书、B站、X 收藏整理成同一个 Obsidian 可用的 Markdown 资源库。
 
-It is for people who do not want four disconnected export piles. Give your agent a bookmark HTML export, Xiaohongshu HTML export, local Bilibili favorites, or X likes JSON; `openvault` routes the job, preserves your local taxonomy when it exists, and writes the result into a durable Markdown archive.
+它解决的不是“再导出一次文件”，而是把不同来源的收藏沉淀成可搜索、可分类、可长期维护的本地知识资产。给 agent 一个书签 HTML、小红书 HTML、本地 B站收藏或 X likes JSON，`openvault` 会自动路由到对应 workflow，优先保留你已有的本地 taxonomy，并把结果写进稳定的 Markdown 归档。
 
 ```text
-Bookmarks / Xiaohongshu / Bilibili / X
+书签 / 小红书 / B站 / X
         -> openvault
         -> <resources-root>/{书签,小红书,B站,X,搜索,废弃}
 ```
 
-[Install](#install) · [Use it](#use-it) · [Supported sources](#supported-sources) · [Output preview](#output-preview) · [Develop](#develop)
+[安装](#安装) · [使用](#使用) · [支持来源](#支持来源) · [输出预览](#输出预览) · [开发](#开发)
 
 ---
 
-## Install
+## 安装
 
-Install the skill with the open agent skills CLI:
+用 open agent skills CLI 安装：
 
 ```bash
 npx skills add Ghibli1024/openvault -g -a codex
 ```
 
-Useful variants:
+常用变体：
 
 ```bash
-# List what the repository exposes before installing
+# 安装前先看这个仓库会暴露哪些 skill
 npx skills add Ghibli1024/openvault --list
 
-# Install for every detected compatible agent
+# 安装到所有检测到的兼容 agent
 npx skills add Ghibli1024/openvault --all
 ```
 
-Restart Codex or your target agent after installation so the new `openvault` skill is discovered.
+安装后重启 Codex 或目标 agent，让新的 `openvault` skill 被重新发现。
 
-## Use It
+## 使用
 
-Ask naturally:
+直接说自然语言：
 
 ```text
-Use openvault to import this bookmarks HTML into <resources-root>.
-Use openvault to sync my Bilibili favorites into <resources-root>.
-Use openvault to import these Xiaohongshu favorites and likes HTML files.
-Use openvault to import this X likes JSON.
-Use openvault to search "AI design tools" across <resources-root>.
-Use openvault to clean the rubbish queue under <resources-root>.
+用 openvault 把这个书签 HTML 导入 <resources-root>。
+用 openvault 把我的 B站收藏同步到 <resources-root>。
+用 openvault 导入这两个小红书收藏和喜欢 HTML。
+用 openvault 导入这个 X likes JSON。
+用 openvault 在 <resources-root> 里搜索「AI design tools」。
+用 openvault 清理 <resources-root>/废弃 里的人工删除队列。
 ```
 
-The root [SKILL.md](SKILL.md) is the only agent entry. Source-specific details live under `sources/*/WORKFLOW.md` and are loaded only after routing.
+根目录 [SKILL.md](SKILL.md) 是唯一 agent 入口。各来源细节放在 `sources/*/WORKFLOW.md`，只有路由命中后才需要读取。
 
-## Supported Sources
+## 支持来源
 
-| Source | Input | Main output | Best for |
+| 来源 | 输入 | 主要输出 | 最适合 |
 |---|---|---|---|
-| Bookmarks | Netscape-style browser bookmark HTML from Chrome, Edge, Firefox, or similar exporters | `书签/` category tree with `ROOT分类目录.md` | Long-lived web resource library |
-| Xiaohongshu | Exported favorites HTML and optional likes HTML | `小红书/` with date, author, source, taxonomy, coarse-category, and dashboard views | Inspiration, lifestyle, visual references |
-| Bilibili | Current favorites from the local logged-in browser environment | `B站/` with date, uploader, folder, taxonomy, coarse-category, and dashboard views | Video resource library |
-| X Likes | Likes JSON from an upstream exporter | `X/` with date, author, taxonomy, and dashboard views | Information-stream capture |
+| 书签 | Chrome、Edge、Firefox 等导出的 Netscape 风格 bookmark HTML | 带 `ROOT分类目录.md` 的 `书签/` 分类树 | 长期网页资源库 |
+| 小红书 | 收藏 HTML，可选喜欢 HTML | `小红书/` 日期、作者、来源、领域、粗分类、仪表盘视图 | 灵感、生活方式、视觉参考 |
+| B站 | 本地浏览器登录态下的当前收藏 | `B站/` 日期、UP主、收藏夹、领域、粗分类、仪表盘视图 | 视频资源库 |
+| X Likes | 上游导出的 likes JSON | `X/` 日期、作者、领域视图 | 信息流沉淀 |
 
-## Output Preview
+## 输出预览
 
-`openvault` expects a shared resources root like this:
+`openvault` 面向一个共享 resources root：
 
 ```text
 <resources-root>/
@@ -95,7 +93,7 @@ The root [SKILL.md](SKILL.md) is the only agent entry. Source-specific details l
 └── 废弃/
 ```
 
-Example sync summary shape:
+一次同步的摘要大致长这样：
 
 ```text
 source: bookmarks
@@ -108,47 +106,47 @@ updated: 8
 removed: 3
 ```
 
-## Core Rules
+## 核心规则
 
-### One Skill Entry
+### 一个 skill 入口
 
-`openvault` exposes one root `SKILL.md`. It detects the source, then reads the matching source workflow:
+`openvault` 只暴露一个根 `SKILL.md`。它负责判断来源，然后读取对应来源 workflow：
 
 - `sources/bookmarks/WORKFLOW.md`
 - `sources/xhs/WORKFLOW.md`
 - `sources/bilibili/WORKFLOW.md`
 - `sources/x-likes/WORKFLOW.md`
 
-### Preserve Local Taxonomy
+### 保留本地 taxonomy
 
-When a target archive already has `ROOT分类目录.md`, treat it as the source of truth. Incoming exports can add evidence, but they should not silently replace the user's classification tree.
+如果目标归档里已经有 `ROOT分类目录.md`，就把它当成事实来源。新导出可以提供证据，但不能静默替换用户已经建立的分类树。
 
-Precedence:
+优先级：
 
-1. Explicit taxonomy or rules path from the user
-2. Existing local archive `ROOT分类目录.md`
-3. Source workflow default taxonomy fallback
+1. 用户显式给出的 taxonomy 或规则路径
+2. 目标归档里已有的 `ROOT分类目录.md`
+3. 来源 workflow 自带的默认 taxonomy fallback
 
-### Global Search And Rubbish
+### 全局搜索与废弃
 
-Search and manual rubbish are shared at the resources-root level:
+搜索和人工废弃提升到 resources-root 层：
 
-- `搜索/` stores cross-source search result notes.
-- `废弃/` stores local editorial removal intent.
+- `搜索/` 存放跨来源搜索结果笔记。
+- `废弃/` 存放本地人工删除意图。
 
-Manual rubbish is not the same as authoritative upstream deletion. If the user explicitly asks for a local-vs-cloud authoritative sync, a source workflow may remove missing items differently. Otherwise, `废弃/` remains the manual curation queue.
+人工废弃不是上游权威删除。只有当用户明确要求本地与云端权威同步时，来源 workflow 才可以用另一套方式处理上游已消失的内容。默认情况下，`废弃/` 始终是人工整理队列。
 
-## Privacy And Safety
+## 隐私与安全
 
-`openvault` is intentionally local-first.
+`openvault` 的设计原则是本地优先。
 
-- Repository examples use placeholders such as `<resources-root>` and `<path-to-export>`.
-- Raw exports, generated notes, account names, URLs, and browsing history may be sensitive.
-- Do not commit personal exports, generated archives, state files, or vault-specific absolute paths to a public repository unless you have sanitized them.
-- Bookmark, Xiaohongshu, and X workflows operate on user-provided export files.
-- The Bilibili workflow relies on the local logged-in browser environment instead of storing credentials in the repository.
+- 仓库示例统一使用 `<resources-root>`、`<path-to-export>` 这类占位符。
+- 原始导出、生成笔记、账号名、URL、浏览历史都可能包含隐私信息。
+- 除非明确脱敏，不要把个人导出、生成归档、状态文件或 vault 绝对路径提交到公开仓库。
+- 书签、小红书、X workflow 使用用户提供的导出文件。
+- B站 workflow 依赖本地浏览器登录态，不把账号凭据写进仓库。
 
-## Repository Layout
+## 仓库结构
 
 ```text
 openvault/
@@ -170,21 +168,21 @@ openvault/
 └── tests/
 ```
 
-Important files:
+关键文件：
 
-| Path | Purpose |
+| 路径 | 用途 |
 |---|---|
-| `SKILL.md` | Single agent entry and router |
-| `sources/*/WORKFLOW.md` | Source-specific operating instructions |
-| `references/taxonomy-policy.md` | Shared taxonomy precedence |
-| `references/managed-archive-policy.md` | Shared managed-archive cleanup expectations |
-| `scripts/detect_source.py` | Lightweight source detection helper |
-| `scripts/vault_runtime.py` | Shared resources-root path and migration helpers |
-| `scripts/search_resources.py` | Cross-source Markdown search helper |
+| `SKILL.md` | 唯一 agent 入口和 router |
+| `sources/*/WORKFLOW.md` | 来源特有操作流程 |
+| `references/taxonomy-policy.md` | 共享 taxonomy 优先级 |
+| `references/managed-archive-policy.md` | 受管归档的共享清理预期 |
+| `scripts/detect_source.py` | 轻量来源识别 helper |
+| `scripts/vault_runtime.py` | resources-root 路径和迁移 helper |
+| `scripts/search_resources.py` | 跨来源 Markdown 搜索 helper |
 
-## Develop
+## 开发
 
-Run the test suite with the standard-library runner:
+使用标准库测试 runner：
 
 ```bash
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main python3 -m unittest discover -s tests
@@ -194,17 +192,17 @@ python3 -m unittest discover -s sources/xhs/tests
 python3 -m unittest discover -s sources/bilibili/tests
 ```
 
-Verify skill discovery:
+验证 skill 发现面：
 
 ```bash
 npx skills add . --list
 ```
 
-Expected result: one available skill named `openvault`.
+预期结果：只看到一个名为 `openvault` 的 skill。
 
-## Limitations
+## 当前限制
 
-- Supported inputs still depend on source-specific exporters or local browser state.
-- The skill does not provide semantic RAG search by default.
-- It does not normalize every source into an identical schema.
-- Global `废弃/` semantics depend on later sync passes to remove items from generated source views.
+- 支持输入仍依赖对应来源的导出文件或本地浏览器状态。
+- 默认不提供语义 RAG 搜索。
+- skill 不会把所有来源规范成完全一致的 schema。
+- 全局 `废弃/` 的语义依赖后续同步流程真正从生成视图中剔除内容。

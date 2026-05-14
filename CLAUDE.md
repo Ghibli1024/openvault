@@ -18,8 +18,8 @@ tests/ - 根层回归测试，验证 skill 发现面、路由和共享运行时
 
 <配置>
 SKILL.md - 唯一 agent 入口，负责路由、共享规则和报告契约
-README.md - 英文用户入口，主推 npx skills add 安装
-README.zh-CN.md - 中文用户入口，解释 skill-first 使用方式
+README.md - 中文用户入口，解释 skill-first 使用方式并作为 GitHub 默认展示
+README.en.md - 英文用户入口，主推 npx skills add 安装
 </配置>
 
 法则: 单入口·来源隔离·本地优先·taxonomy 不静默覆盖
